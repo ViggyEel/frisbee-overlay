@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Match Control</title>
+<style>
+  body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#111;color:#fff;
+       display:flex;flex-direction:column;align-items:center;gap:20px;padding:24px 16px}
+  #clock{font-size:72px;font-variant-numeric:tabular-nums;font-weight:700}
+  #conn{font-size:14px;opacity:.8}
+  button{width:100%;max-width:420px;font-size:28px;font-weight:700;padding:28px 0;
+         border:0;border-radius:16px;color:#fff}
+  #start{background:#1a7f37} #reset{background:#8b1e1e}
+  button:active{opacity:.7}
+</style>
+</head>
+<body>
+  <div id="conn">connecting…</div>
+  <div id="clock">--:--</div>
+  <button id="start">START CLOCK</button>
+  <button id="reset">RESET CLOCK</button>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue, set, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { firebaseConfig } from "./config.js";
+
+const db = getDatabase(initializeApp(firebaseConfig));
+const matchRef = ref(db, "match/clock");
+
+let startedAt = null;   // server time (ms) when clock was started
+let offset = 0;         // server time minus this phone's time
+
+onValue(ref(db, ".info/serverTimeOffset"), s => offset = s.val() || 0);
+onValue(ref(db, ".info/connected"), s => {
+  document.getElementById("conn").textContent = s.val() ? "connected" : "OFFLINE";
+});
+onValue(matchRef, s => { startedAt = s.val()?.startedAt ?? null; });
+
+document.getElementById("start").onclick = () => {
+  if (startedAt && !confirm("Clock already running. Restart from 0:00?")) return;
+  set(matchRef, { startedAt: serverTimestamp() });
+};
+document.getElementById("reset").onclick = () => {
+  if (confirm("Reset the clock?")) set(matchRef, { startedAt: null });
+};
+
+function fmt(ms){
+  const t = Math.max(0, Math.floor(ms / 1000));
+  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+}
+setInterval(() => {
+  document.getElementById("clock").textContent =
+    startedAt ? fmt(Date.now() + offset - startedAt) : "--:--";
+}, 250);
+</script>
+</body>
+</html>

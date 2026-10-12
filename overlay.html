@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Match Overlay</title>
+<style>
+  html,body{margin:0;background:transparent;font-family:-apple-system,system-ui,sans-serif}
+  #box{display:inline-block;background:rgba(0,0,0,.75);color:#fff;padding:10px 20px;
+       border-radius:10px;font-size:48px;font-weight:700;font-variant-numeric:tabular-nums}
+  #dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#f55;
+       margin-left:12px;vertical-align:middle}
+  #dot.ok{background:#5f5}
+</style>
+</head>
+<body>
+  <div id="box"><span id="clock">--:--</span><span id="dot"></span></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { firebaseConfig } from "./config.js";
+
+const db = getDatabase(initializeApp(firebaseConfig));
+
+let startedAt = null;
+let offset = 0;
+
+onValue(ref(db, ".info/serverTimeOffset"), s => offset = s.val() || 0);
+onValue(ref(db, ".info/connected"), s => {
+  document.getElementById("dot").className = s.val() ? "ok" : "";
+});
+onValue(ref(db, "match/clock"), s => { startedAt = s.val()?.startedAt ?? null; });
+
+function fmt(ms){
+  const t = Math.max(0, Math.floor(ms / 1000));
+  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+}
+setInterval(() => {
+  document.getElementById("clock").textContent =
+    startedAt ? fmt(Date.now() + offset - startedAt) : "--:--";
+}, 250);
+</script>
+</body>
+</html>
