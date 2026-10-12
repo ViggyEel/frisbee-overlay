@@ -4,42 +4,73 @@
 <meta charset="utf-8">
 <title>Match Overlay</title>
 <style>
-  html,body{margin:0;background:transparent;font-family:-apple-system,system-ui,sans-serif}
-  #box{display:inline-block;background:rgba(0,0,0,.75);color:#fff;padding:10px 20px;
-       border-radius:10px;font-size:48px;font-weight:700;font-variant-numeric:tabular-nums}
-  #dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#f55;
-       margin-left:12px;vertical-align:middle}
-  #dot.ok{background:#5f5}
+  html,body{margin:0;background:transparent;font-family:-apple-system,system-ui,sans-serif;color:#fff}
+  #wrap{position:absolute;top:16px;left:16px;display:inline-flex;flex-direction:column;gap:6px}
+  #bug{background:rgba(10,10,10,.85);border-radius:10px;overflow:hidden;min-width:300px}
+  .t{display:flex;align-items:center;gap:10px;padding:6px 12px;font-size:26px;font-weight:700}
+  .t img{width:30px;height:30px;object-fit:contain} .t img[src=""]{display:none}
+  .t .nm{flex:1;white-space:nowrap}
+  .t .sc{min-width:40px;text-align:right;font-variant-numeric:tabular-nums;font-size:30px}
+  .t .who{font-size:16px;opacity:.8;min-width:36px;text-align:right}
+  .t.a{border-left:6px solid #1f6feb} .t.b{border-left:6px solid #d97706}
+  #clock{background:#000;text-align:center;padding:6px 12px;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+  #banner{display:none;background:#ffd33d;color:#000;font-weight:800;font-size:20px;padding:6px 12px;border-radius:8px;text-align:center}
+  #dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:#f55}
+  #dot.ok{display:none}
 </style>
 </head>
 <body>
-  <div id="box"><span id="clock">--:--</span><span id="dot"></span></div>
+<div id="wrap">
+  <div id="bug">
+    <div class="t a"><img id="lA" src=""><span class="nm" id="nA"></span><span class="who" id="wA"></span><span class="sc" id="sA">0</span></div>
+    <div class="t b"><img id="lB" src=""><span class="nm" id="nB"></span><span class="who" id="wB"></span><span class="sc" id="sB">0</span></div>
+    <div id="clock">--:--</div>
+  </div>
+  <div id="banner"></div>
+</div>
+<div id="dot"></div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-import { firebaseConfig } from "./config.js";
+import { compute, fmt } from "./engine.js";
+import { watchCurrent, onConnected, now } from "./db.js";
 
-const db = getDatabase(initializeApp(firebaseConfig));
+const $ = id => document.getElementById(id);
+let cur = null;
+watchCurrent(c => { cur = c; render(); });
+onConnected(ok => { $("dot").className = ok ? "ok" : ""; });
 
-let startedAt = null;
-let offset = 0;
+function render() {
+  if (!cur) { $("wrap").style.display = "none"; return; }
+  $("wrap").style.display = "";
+  const v = compute(cur.game.settings, cur.events, now());
+  const { s, st, status } = v;
 
-onValue(ref(db, ".info/serverTimeOffset"), s => offset = s.val() || 0);
-onValue(ref(db, ".info/connected"), s => {
-  document.getElementById("dot").className = s.val() ? "ok" : "";
-});
-onValue(ref(db, "match/clock"), s => { startedAt = s.val()?.startedAt ?? null; });
+  $("nA").textContent = s.teamA; $("nB").textContent = s.teamB;
+  if ($("lA").getAttribute("src") !== (s.logoA || "")) $("lA").setAttribute("src", s.logoA || "");
+  if ($("lB").getAttribute("src") !== (s.logoB || "")) $("lB").setAttribute("src", s.logoB || "");
+  $("sA").textContent = st.a; $("sB").textContent = st.b;
+  $("wA").textContent = st.lastPointTeam === "a" && st.lastScorer ? "#" + st.lastScorer : "";
+  $("wB").textContent = st.lastPointTeam === "b" && st.lastScorer ? "#" + st.lastScorer : "";
 
-function fmt(ms){
-  const t = Math.max(0, Math.floor(ms / 1000));
-  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+  // Clock area: universe point / final replace the clock.
+  let clock = (v.cdLabel ? v.cdLabel + " " : "") + fmt(v.remaining);
+  if (status === "universe") clock = "UNIVERSE POINT";
+  else if (status === "final") clock = "FINAL";
+  else if (status === "half" && s.clockStopsAtHalf) clock = "HALFTIME";
+  else if (status === "lastPoint") clock = "LAST POINT";
+  else if (status === "lastPossession") clock = "LAST POSSESSION";
+  else if (status === "paused") clock = "PAUSED";
+  $("clock").textContent = clock;
+
+  // Banner under the scorebug.
+  let banner = "";
+  if (status === "final") banner = st.winner ? (st.winner === "a" ? s.teamA : s.teamB) + " WIN" : "";
+  else if (status === "half" && !s.clockStopsAtHalf) banner = "HALFTIME";
+  else if (status !== "universe" && (v.mpA || v.mpB)) banner = "MATCH POINT · " + (v.mpA ? s.teamA : s.teamB);
+  $("banner").textContent = banner;
+  $("banner").style.display = banner ? "" : "none";
 }
-setInterval(() => {
-  document.getElementById("clock").textContent =
-    startedAt ? fmt(Date.now() + offset - startedAt) : "--:--";
-}, 250);
+setInterval(render, 250);
 </script>
 </body>
 </html>

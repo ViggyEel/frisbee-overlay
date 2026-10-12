@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match Events</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#111;color:#fff;padding:12px 16px 40px}
+  .top{display:flex;justify-content:space-between;font-size:13px;color:#aaa}
+  select,input{font:inherit;font-size:17px;padding:10px;border-radius:10px;border:1px solid #444;background:#000;color:#fff}
+  select{width:100%;margin:10px 0}
+  h1{font-size:20px;margin:8px 0}
+  .ev{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #2a2a2a}
+  .tm{color:#aaa;font-size:13px;width:64px;flex:0 0 auto;font-variant-numeric:tabular-nums}
+  .what{flex:1} .sc{font-variant-numeric:tabular-nums;color:#aaa;width:52px;text-align:right}
+  .ev input{width:72px}
+  .del{background:#3a1212;color:#fff;border:0;border-radius:8px;padding:10px 12px;font:inherit}
+  .a{border-left:4px solid #1f6feb;padding-left:8px} .b{border-left:4px solid #d97706;padding-left:8px}
+  .live{background:#1a7f37;border:0;color:#fff;border-radius:8px;padding:8px 12px;font:inherit}
+</style>
+</head>
+<body>
+<div class="top"><span>Event list</span><span id="conn">connecting…</span></div>
+<select id="pick"></select>
+<h1 id="title"></h1>
+<div id="list"></div>
+
+<script type="module">
+import { describe, DEFAULTS } from "./engine.js";
+import { watchGames, watchGame, updateEvent, removeEvent, onConnected } from "./db.js";
+
+const $ = id => document.getElementById(id);
+let games = [], gameId = null, unsub = null, editing = false;
+onConnected(ok => { $("conn").textContent = ok ? "connected" : "OFFLINE"; });
+
+watchGames(list => {
+  games = list;
+  const name = g => {
+    const s = g.settings, d = g.created ? new Date(g.created).toLocaleDateString("en-GB") : "";
+    return [d, s.tournament, s.label || `${s.teamA || "?"} v ${s.teamB || "?"}`].filter(Boolean).join(" · ");
+  };
+  const keep = gameId;
+  $("pick").innerHTML = list.map(g => `<option value="${g.id}">${name(g)}</option>`).join("");
+  if (!keep && list.length) open(list[0].id); else if (keep) $("pick").value = keep;
+});
+$("pick").onchange = e => open(e.target.value);
+
+function open(id) {
+  gameId = id; $("pick").value = id;
+  if (unsub) unsub();
+  unsub = watchGame(id, draw);
+}
+
+function draw({ game, events }) {
+  if (editing) return; // don't redraw while someone is typing
+  const s = { ...DEFAULTS, ...(game.settings || {}) };
+  $("title").textContent = `${s.teamA} v ${s.teamB}`;
+  let a = 0, b = 0;
+  $("list").innerHTML = events.map(e => {
+    if (e.type === "point") e.team === "a" ? a++ : b++;
+    if (e.type === "minus") e.team === "a" ? (a = Math.max(0, a - 1)) : (b = Math.max(0, b - 1));
+    const tm = e.t ? new Date(e.t).toLocaleTimeString("en-GB") : "";
+    const isPt = e.type === "point";
+    return `<div class="ev">
+      <span class="tm">${tm}</span>
+      <span class="what ${isPt ? e.team : ""}">${describe({ ...e, scorer: null }, s)}</span>
+      ${isPt ? `<input data-k="${e.key}" inputmode="numeric" placeholder="#" value="${e.scorer || ""}">` : ""}
+      <span class="sc">${a}–${b}</span>
+      <button class="del" data-del="${e.key}">✕</button>
+    </div>`;
+  }).join("") || "<p>No events yet.</p>";
+
+  $("list").querySelectorAll("input[data-k]").forEach(inp => {
+    inp.onfocus = () => { editing = true; };
+    inp.onblur = () => {
+      editing = false;
+      updateEvent(gameId, inp.dataset.k, { scorer: inp.value.trim() || null });
+    };
+  });
+  $("list").querySelectorAll("[data-del]").forEach(btn => btn.onclick = () => {
+    if (confirm("Delete this event? The score will be recalculated.")) removeEvent(gameId, btn.dataset.del);
+  });
+}
+</script>
+</body>
+</html>

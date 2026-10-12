@@ -5,56 +5,238 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>Match Control</title>
 <style>
-  body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#111;color:#fff;
-       display:flex;flex-direction:column;align-items:center;gap:20px;padding:24px 16px}
-  #clock{font-size:72px;font-variant-numeric:tabular-nums;font-weight:700}
-  #conn{font-size:14px;opacity:.8}
-  button{width:100%;max-width:420px;font-size:28px;font-weight:700;padding:28px 0;
-         border:0;border-radius:16px;color:#fff}
-  #start{background:#1a7f37} #reset{background:#8b1e1e}
-  button:active{opacity:.7}
+  :root{--bg:#111;--card:#1d1d1d;--mut:#aaa;--a:#1f6feb;--b:#d97706;--ok:#1a7f37;--bad:#8b1e1e}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:#fff;padding:12px 16px 90px}
+  .top{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--mut)}
+  .clock{font-size:56px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;margin:6px 0 0}
+  .status{text-align:center;font-weight:700;color:#ffd33d;min-height:22px}
+  .teams{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+  .team{background:var(--card);border-radius:14px;padding:10px;text-align:center}
+  .name{font-weight:700;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .score{font-size:64px;font-weight:800;font-variant-numeric:tabular-nums}
+  button{font:inherit;font-weight:700;border:0;border-radius:12px;color:#fff;padding:16px;width:100%;background:#333}
+  button:active{opacity:.7} button:disabled{opacity:.35}
+  .plus{font-size:32px;padding:26px 0}
+  .pa{background:var(--a)} .pb{background:var(--b)} .go{background:var(--ok)} .stop{background:var(--bad)}
+  .row{display:flex;gap:10px;margin-top:12px} .row>*{flex:1}
+  input,select{font:inherit;font-size:18px;padding:12px;border-radius:10px;border:1px solid #444;background:#000;color:#fff;width:100%}
+  label{display:block;margin:12px 0 4px;color:var(--mut);font-size:14px}
+  .chk{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:16px}
+  .chk input{width:26px;height:26px;flex:0 0 auto}
+  .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:#000;border-top:1px solid #333}
+  .tabs button{border-radius:0;background:none;color:var(--mut);padding:18px 0 24px}
+  .tabs button.on{color:#fff}
+  .screen{display:none} .screen.on{display:block}
+  h2{font-size:17px;margin:22px 0 4px}
+  .hint{color:var(--mut);font-size:13px;margin-top:6px}
 </style>
 </head>
 <body>
-  <div id="conn">connecting…</div>
-  <div id="clock">--:--</div>
-  <button id="start">START CLOCK</button>
-  <button id="reset">RESET CLOCK</button>
+<div class="top"><span id="game">No game yet</span><span id="conn">connecting…</span></div>
+
+<section id="main" class="screen on">
+  <div class="clock" id="clock">--:--</div>
+  <div class="status" id="status"></div>
+  <div class="teams">
+    <div class="team"><div class="name" id="nA">Home</div><div class="score" id="sA">0</div>
+      <button class="plus pa" id="pA">+1</button></div>
+    <div class="team"><div class="name" id="nB">Away</div><div class="score" id="sB">0</div>
+      <button class="plus pb" id="pB">+1</button></div>
+  </div>
+  <label for="scorer">Last point scored by # (optional)</label>
+  <input id="scorer" inputmode="numeric" placeholder="player number">
+  <div class="row"><button class="go" id="startBtn">START CLOCK</button></div>
+  <div class="row"><button class="stop" id="endBtn" style="display:none">END GAME</button></div>
+  <div class="hint" id="mainHint"></div>
+</section>
+
+<section id="over" class="screen">
+  <h2>Corrections</h2>
+  <button id="undo">UNDO LAST ACTION</button>
+  <div class="hint" id="undoHint"></div>
+  <div class="row"><button id="mA">−1 Home</button><button id="mB">−1 Away</button></div>
+  <h2>Clock</h2>
+  <button id="pauseBtn">PAUSE</button>
+  <label for="remain">Set time remaining to match tournament clock (mm:ss)</label>
+  <div class="row"><input id="remain" inputmode="numeric" placeholder="e.g. 72:30"><button id="setClock" style="flex:0 0 30%">SET</button></div>
+  <div class="hint" id="clockHint"></div>
+  <h2>Game</h2>
+  <button class="stop" id="endNow">END GAME NOW</button>
+</section>
+
+<section id="setup" class="screen">
+  <div id="form"></div>
+  <div class="row"><button class="go" id="newGame">START NEW GAME</button></div>
+  <div class="row"><button id="saveSet">UPDATE CURRENT GAME'S RULES</button></div>
+  <div class="hint">“Start new game” keeps the old game in the event list and makes a fresh one live.</div>
+</section>
+
+<nav class="tabs">
+  <button data-s="main" class="on">Main</button>
+  <button data-s="over">Overrides</button>
+  <button data-s="setup">Game setup</button>
+</nav>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue, set, serverTimestamp }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
-import { firebaseConfig } from "./config.js";
+import { compute, fmt, describe, DEFAULTS } from "./engine.js";
+import { watchCurrent, addEvent, removeEvent, updateEvent, newGame, saveSettings, onConnected, now } from "./db.js";
 
-const db = getDatabase(initializeApp(firebaseConfig));
-const matchRef = ref(db, "match/clock");
+const $ = id => document.getElementById(id);
 
-let startedAt = null;   // server time (ms) when clock was started
-let offset = 0;         // server time minus this phone's time
-
-onValue(ref(db, ".info/serverTimeOffset"), s => offset = s.val() || 0);
-onValue(ref(db, ".info/connected"), s => {
-  document.getElementById("conn").textContent = s.val() ? "connected" : "OFFLINE";
+// ---- tabs
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".screen").forEach(x => x.classList.toggle("on", x.id === b.dataset.s));
 });
-onValue(matchRef, s => { startedAt = s.val()?.startedAt ?? null; });
 
-document.getElementById("start").onclick = () => {
-  if (startedAt && !confirm("Clock already running. Restart from 0:00?")) return;
-  set(matchRef, { startedAt: serverTimestamp() });
-};
-document.getElementById("reset").onclick = () => {
-  if (confirm("Reset the clock?")) set(matchRef, { startedAt: null });
-};
+// ---- settings form
+const FIELDS = [
+  ["tournament", "Tournament", "text"],
+  ["label", "Game (e.g. Pool A vs Bristol)", "text"],
+  ["teamA", "Team A name", "text"],
+  ["teamB", "Team B name", "text"],
+  ["logoA", "Team A logo URL (optional)", "text"],
+  ["logoB", "Team B logo URL (optional)", "text"],
+  ["target", "Game to (points)", "number"],
+  ["winBy2", "Win by 2", "check"],
+  ["pointCap", "Point cap (only used with win by 2)", "number"],
+  ["halfTarget", "Halftime at (points)", "number"],
+  ["halfCapMin", "Halftime cap (minutes)", "number"],
+  ["clockStopsAtHalf", "Clock stops at halftime", "check"],
+  ["softEnabled", "Use soft cap", "check"],
+  ["softCapMin", "Soft cap (minutes)", "number"],
+  ["softAdd", "Soft cap adds", "select", [["1", "+1 to higher score"], ["2", "+2 to higher score"]]],
+  ["hardEnabled", "Use hard cap / end of time", "check"],
+  ["hardCapMin", "Hard cap (minutes)", "number"],
+  ["endRule", "When time runs out", "select", [
+    ["lastPoint", "Finish the point (if tied, one more point)"],
+    ["lastPossession", "Finish the possession (tap End Game)"],
+    ["plusOne", "+1 to higher score, play to that"]]]
+];
+$("form").innerHTML = FIELDS.map(([k, lab, type, opts]) => {
+  if (type === "check") return `<label class="chk"><input type="checkbox" id="f_${k}">${lab}</label>`;
+  if (type === "select") return `<label for="f_${k}">${lab}</label><select id="f_${k}">${
+    opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select>`;
+  return `<label for="f_${k}">${lab}</label><input id="f_${k}" ${type === "number" ? 'type="number" inputmode="numeric"' : 'type="text"'}>`;
+}).join("");
 
-function fmt(ms){
-  const t = Math.max(0, Math.floor(ms / 1000));
-  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+function fillForm(s) {
+  for (const [k, , type] of FIELDS) {
+    const el = $("f_" + k), v = s[k] ?? DEFAULTS[k];
+    if (type === "check") el.checked = !!v; else el.value = v;
+  }
 }
-setInterval(() => {
-  document.getElementById("clock").textContent =
-    startedAt ? fmt(Date.now() + offset - startedAt) : "--:--";
-}, 250);
+function readForm() {
+  const s = {};
+  for (const [k, , type] of FIELDS) {
+    const el = $("f_" + k);
+    s[k] = type === "check" ? el.checked : type === "number" ? Number(el.value) : el.value.trim();
+  }
+  return s;
+}
+fillForm(DEFAULTS);
+
+// ---- live data
+let cur = null, filledFor = null, lastKeySeen = null, view = null;
+watchCurrent(c => {
+  cur = c;
+  if (c && c.id !== filledFor) { fillForm(c.game.settings || DEFAULTS); filledFor = c.id; }
+  render();
+});
+onConnected(ok => { $("conn").textContent = ok ? "connected" : "OFFLINE"; });
+
+function render() {
+  if (!cur) { $("game").textContent = "No game — open Game setup"; return; }
+  view = compute(cur.game.settings, cur.events, now());
+  const { s, st, remaining, cdLabel, status } = view;
+
+  $("game").textContent = [s.tournament, s.label].filter(Boolean).join(" · ") || "Current game";
+  $("nA").textContent = s.teamA; $("nB").textContent = s.teamB;
+  $("mA").textContent = "−1 " + s.teamA; $("mB").textContent = "−1 " + s.teamB;
+  $("sA").textContent = st.a; $("sB").textContent = st.b;
+  $("clock").textContent = (cdLabel ? cdLabel + " " : "") + fmt(remaining);
+
+  const STATUS = {
+    final: "GAME OVER", pre: "Clock not started", paused: "PAUSED", half: "HALFTIME",
+    universe: "UNIVERSE POINT", lastPoint: "LAST POINT", lastPossession: "LAST POSSESSION", clock: ""
+  };
+  let txt = STATUS[status];
+  if (status === "clock" && (view.mpA || view.mpB)) txt = "MATCH POINT " + (view.mpA ? s.teamA : s.teamB);
+  if (status !== "final" && status !== "pre") txt += `  ·  game to ${st.target}${st.winBy2 ? " (win by 2, cap " + st.cap + ")" : ""}`;
+  $("status").textContent = txt;
+
+  // start / 2nd half / resume button
+  const sb = $("startBtn");
+  if (st.ended) sb.style.display = "none";
+  else if (st.paused) { sb.style.display = ""; sb.textContent = "RESUME CLOCK"; sb.dataset.act = "resume"; }
+  else if (!st.started) { sb.style.display = ""; sb.textContent = "START CLOCK"; sb.dataset.act = "start"; }
+  else if (st.inHalf && s.clockStopsAtHalf) { sb.style.display = ""; sb.textContent = "START 2ND HALF"; sb.dataset.act = "start"; }
+  else sb.style.display = "none";
+
+  $("endBtn").style.display = status === "lastPossession" ? "" : "none";
+  $("pA").disabled = $("pB").disabled = st.ended;
+  $("pauseBtn").textContent = st.paused ? "RESUME" : "PAUSE";
+  $("mainHint").textContent = st.ended ? "Game over. Start a new game from Game setup." : "";
+
+  // scorer box clears whenever a new point is scored
+  if (st.lastPointKey !== lastKeySeen) {
+    lastKeySeen = st.lastPointKey;
+    $("scorer").value = st.lastScorer || "";
+  }
+  $("scorer").disabled = !st.lastPointKey;
+
+  const last = cur.events[cur.events.length - 1];
+  $("undoHint").textContent = last ? "Last action: " + describe(last, s) : "Nothing to undo";
+  $("clockHint").textContent = view.cdTarget == null ? "No countdown running" :
+    `Currently counting down to ${cdLabel === "HALF" ? "halftime cap" : cdLabel === "CAP" ? "hard cap" : "soft cap"}`;
+}
+setInterval(render, 250);
+
+// ---- actions
+const act = e => cur && addEvent(cur.id, e);
+$("pA").onclick = () => act({ type: "point", team: "a" });
+$("pB").onclick = () => act({ type: "point", team: "b" });
+$("startBtn").onclick = e => act({ type: e.target.dataset.act });
+$("endBtn").onclick = $("endNow").onclick = () => { if (confirm("End the game now?")) act({ type: "end" }); };
+$("mA").onclick = () => act({ type: "minus", team: "a" });
+$("mB").onclick = () => act({ type: "minus", team: "b" });
+$("pauseBtn").onclick = () => view && act({ type: view.st.paused ? "resume" : "pause" });
+
+$("undo").onclick = () => {
+  if (!cur || !cur.events.length) return;
+  const last = cur.events[cur.events.length - 1];
+  if (confirm("Undo: " + describe(last, view.s) + "?")) removeEvent(cur.id, last.key);
+};
+
+$("setClock").onclick = () => {
+  const m = $("remain").value.trim().match(/^(\d{1,3}):([0-5]\d)$/);
+  if (!m) { alert("Enter time as mm:ss, e.g. 72:30"); return; }
+  if (!view || view.cdTarget == null) { alert("No countdown is running to set."); return; }
+  const remainingMs = (Number(m[1]) * 60 + Number(m[2])) * 1000;
+  act({ type: "clock_set", elapsed: Math.max(0, view.cdTarget - remainingMs) });
+  $("remain").value = "";
+};
+
+let scorerTimer;
+$("scorer").oninput = () => {
+  clearTimeout(scorerTimer);
+  scorerTimer = setTimeout(() => {
+    if (cur && view?.st.lastPointKey)
+      updateEvent(cur.id, view.st.lastPointKey, { scorer: $("scorer").value.trim() || null });
+  }, 400);
+};
+
+$("newGame").onclick = async () => {
+  if (cur && view && view.st.started && !view.st.ended &&
+      !confirm("The current game hasn't ended. Start a new game anyway?")) return;
+  await newGame(readForm());
+  document.querySelector('.tabs button[data-s="main"]').click();
+};
+$("saveSet").onclick = () => {
+  if (!cur) { alert("No current game — use Start new game."); return; }
+  if (confirm("Change the rules of the current game? Score is recalculated from its events.")) saveSettings(cur.id, readForm());
+};
 </script>
 </body>
 </html>
