@@ -97,8 +97,8 @@
 </nav>
 
 <script type="module">
-import { compute, fmt, describe, DEFAULTS } from "./engine.js";
-import { watchCurrent, addEvent, removeEvent, updateEvent, newGame, saveSettings, onConnected, now } from "./db.js";
+import { compute, fmt, describe, DEFAULTS } from "./engine.js?v=3";
+import { watchCurrent, addEvent, removeEvent, updateEvent, newGame, saveSettings, onConnected, now } from "./db.js?v=3";
 
 const $ = id => document.getElementById(id);
 
@@ -111,7 +111,8 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
 // ---- settings form
 const FIELDS = [
   ["tournament", "Tournament", "text"],
-  ["label", "Game (e.g. Pool A vs Bristol)", "text"],
+  ["division", "Division", "select", [["", "(none)"], ["Open", "Open"], ["Mixed", "Mixed"], ["Women's", "Women's"]]],
+  ["label", "Round (optional, e.g. Pool A, Quarter-final, Final)", "text"],
   ["teamA", "Team A name", "text"],
   ["teamB", "Team B name", "text"],
   ["barA", "Team A bar name / code (optional)", "text"],
@@ -121,7 +122,8 @@ const FIELDS = [
   ["colB", "Team B colour", "color"],
   ["colBText", "Team B text colour", "color"],
   ["darks", "Who wears darks", "select", [["a", "Team A"], ["b", "Team B"]]],
-  ["eventText", "Event wordmark (blank = no event block)", "text"],
+  ["eventLogo", "Tournament logo (PNG with transparent background works best)", "image"],
+  ["eventText", "Event wordmark, used when there's no logo (blank + no logo = no event block)", "text"],
   ["eventBg", "Event block colour", "color"],
   ["showPeriod", "Show period (1st/2nd)", "check"],
   ["breakChance", "Break chance button", "check"],
@@ -145,14 +147,39 @@ $("form").innerHTML = FIELDS.map(([k, lab, type, opts]) => {
   if (type === "check") return `<label class="chk"><input type="checkbox" id="f_${k}">${lab}</label>`;
   if (type === "select") return `<label for="f_${k}">${lab}</label><select id="f_${k}">${
     opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select>`;
+  if (type === "image") return `<label>${lab}</label><div class="row" style="margin-top:0;align-items:center">
+    <img id="prev_${k}" style="height:56px;max-width:120px;object-fit:contain;background:#ECECEC;border-radius:6px;flex:0 0 auto">
+    <input id="file_${k}" type="file" accept="image/*" style="font-size:14px"><button type="button" id="clr_${k}" style="flex:0 0 22%">REMOVE</button>
+    <input id="f_${k}" type="hidden"></div>`;
   if (type === "color") return `<label for="f_${k}">${lab}</label><input id="f_${k}" type="color" style="height:48px;padding:4px">`;
   return `<label for="f_${k}">${lab}</label><input id="f_${k}" ${type === "number" ? 'type="number" inputmode="numeric"' : 'type="text"'}>`;
 }).join("");
+
+// Logo: shrink to fit 400x224 (the event block is ~100x56 on a 1080p frame, so this is plenty)
+// and store it in the game itself, so no separate file hosting is needed.
+function wireImage(k) {
+  const show = () => { const v = $("f_" + k).value; $("prev_" + k).src = v || ""; $("prev_" + k).style.visibility = v ? "visible" : "hidden"; };
+  $("file_" + k).onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const img = new Image();
+    img.onload = () => {
+      const k2 = Math.min(1, 400 / img.width, 224 / img.height);
+      const c = document.createElement("canvas"); c.width = Math.round(img.width * k2); c.height = Math.round(img.height * k2);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      $("f_" + k).value = c.toDataURL("image/png"); show(); URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(f);
+  };
+  $("clr_" + k).onclick = () => { $("f_" + k).value = ""; $("file_" + k).value = ""; show(); };
+  $("f_" + k).show = show;
+}
+FIELDS.filter(f => f[2] === "image").forEach(f => wireImage(f[0]));
 
 function fillForm(s) {
   for (const [k, , type] of FIELDS) {
     const el = $("f_" + k), v = s[k] ?? DEFAULTS[k];
     if (type === "check") el.checked = !!v; else el.value = v;
+    if (type === "image") el.show();
   }
 }
 function readForm() {

@@ -27,8 +27,8 @@
 <div id="list"></div>
 
 <script type="module">
-import { describe, DEFAULTS } from "./engine.js";
-import { watchGames, watchGame, updateEvent, removeEvent, onConnected } from "./db.js";
+import { describe, DEFAULTS } from "./engine.js?v=3";
+import { watchGames, watchGame, updateEvent, removeEvent, onConnected } from "./db.js?v=3";
 
 const $ = id => document.getElementById(id);
 let games = [], gameId = null, unsub = null, editing = false;
@@ -38,7 +38,7 @@ watchGames(list => {
   games = list;
   const name = g => {
     const s = g.settings, d = g.created ? new Date(g.created).toLocaleDateString("en-GB") : "";
-    return [d, s.tournament, s.label || `${s.teamA || "?"} v ${s.teamB || "?"}`].filter(Boolean).join(" · ");
+    return [d, s.tournament, s.division, s.label || `${s.teamA || "?"} v ${s.teamB || "?"}`].filter(Boolean).join(" · ");
   };
   const keep = gameId;
   $("pick").innerHTML = list.map(g => `<option value="${g.id}">${name(g)}</option>`).join("");

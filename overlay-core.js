@@ -64,9 +64,11 @@ export async function mountOverlay(host, svgText) {
     if (/bebas/i.test(getComputedStyle(t).fontFamily)) t.style.fontFamily = KIT_FAMILY;
   });
   await Promise.race([
-    Promise.all(["400", "700"].map(w => document.fonts.load(`${w} 40px bebas-neue-pro`).catch(() => {}))),
-    new Promise(r => setTimeout(r, 4000))
+    Promise.all(["400", "600", "700"].map(w => document.fonts.load(`${w} 40px bebas-neue-pro`).catch(() => {}))),
+    new Promise(r => setTimeout(r, 6000))
   ]);
+  // Placeholder text can only be measured reliably in the real font.
+  const fontOK = [...document.fonts].some(f => /bebas-neue-pro/i.test(f.family) && f.status === "loaded");
 
   // ---- colour tokens: remember which element/property carries which role
   const painted = [];
@@ -79,6 +81,26 @@ export async function mountOverlay(host, svgText) {
     }
   });
 
+  // Fallback anchors from the block shapes, used only if the font failed to load.
+  // Text is in its own coordinates; block shapes are in the SVG's, so convert through the CTMs.
+  function geomAnchor(id, anchor, el, bb) {
+    const rootBox = e => { const r = e.getBoundingClientRect(), k = svg.getScreenCTM().inverse();
+      const a = svg.createSVGPoint(); a.x = r.left; a.y = r.top; const b = svg.createSVGPoint(); b.x = r.right; b.y = r.bottom;
+      const A = a.matrixTransform(k), B = b.matrixTransform(k); return { x: A.x, w: B.x - A.x }; };
+    const local = X => { const p = svg.createSVGPoint(); p.x = X; p.y = 0;
+      return p.matrixTransform(el.getScreenCTM().inverse().multiply(svg.getScreenCTM())).x; };
+    if (id === "text_subtitle") {
+      const a = $("block_scoreA_bg"), b = $("block_scoreB_bg"); if (!a || !b) return null;
+      const A = rootBox(a), B = rootBox(b); return local((A.x + B.x + B.w) / 2);
+    }
+    const bg = $(id.replace("text_", "block_") + "_bg"), box = $(id.replace("text_", "block_") + "_box");
+    const g = bg || box; if (!g) return null;
+    const G = rootBox(box || bg), C = rootBox(g);
+    if (anchor === "start") return local(G.x + 16);
+    if (anchor === "end") return local(G.x + G.w - 16);
+    return local(C.x + C.w / 2);
+  }
+
   // Blocks the designer hid (e.g. the centre message) must be rendered to be measured and shown.
   ["block_tabA", "block_tabB", "block_centre"].forEach(id => { const b = $(id); if (b) b.style.display = "inline"; });
 
@@ -89,7 +111,8 @@ export async function mountOverlay(host, svgText) {
     const bb = el.getBBox();
     const ts = el.querySelector("tspan");
     const y = Number(ts?.getAttribute("y") ?? el.getAttribute("y") ?? 0);
-    const x = anchor === "start" ? bb.x : anchor === "end" ? bb.x + bb.width : bb.x + bb.width / 2;
+    let x = anchor === "start" ? bb.x : anchor === "end" ? bb.x + bb.width : bb.x + bb.width / 2;
+    if (!fontOK) x = geomAnchor(id, anchor, el, bb) ?? x;
     el.replaceChildren(document.createTextNode(""));
     el.setAttribute("x", x); el.setAttribute("y", y); el.setAttribute("text-anchor", anchor);
     const box = $(id.replace("text_", "block_") + "_box");
@@ -248,7 +271,7 @@ export async function mountOverlay(host, svgText) {
       const k = (R - L) / bar.sub.width;
       subBg.style.transform = `translate(${L - bar.sub.x * k}px,0px) scale(${k},1)`;
     }
-    const sub = [s.tournament, s.label].filter(Boolean).join("  ·  ").toUpperCase();
+    const sub = [s.tournament, s.division, s.label].filter(Boolean).join("  ·  ").toUpperCase();
     set("text_subtitle", sub);
     if (W.block_subtitle) W.block_subtitle.style.opacity = sub ? "1" : "0";
 

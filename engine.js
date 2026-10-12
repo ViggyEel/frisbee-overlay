@@ -2,7 +2,7 @@
 // the game's settings + its list of events + the current time.
 
 export const DEFAULTS = {
-  tournament: "", label: "",
+  tournament: "", division: "", label: "",
   teamA: "Home", teamB: "Away", barA: "", barB: "",
   colA: "#2E2E2E", colAText: "#FFFFFF", colB: "#4A4A4A", colBText: "#FFFFFF",
   darks: "a",            // which team wears darks (score box black); the other is lights
