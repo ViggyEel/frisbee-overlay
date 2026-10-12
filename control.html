@@ -95,10 +95,10 @@ input.txt{width:100%;height:calc(var(--u)*56);font-size:calc(var(--u)*30);backgr
 <div id="rotate">TURN THE PHONE SIDEWAYS</div>
 
 <script type="module">
-import { compute, fmt, fmtUp, describe, other, DEFAULTS } from "./engine.js?v=5";
+import { compute, fmt, fmtUp, describe, other, DEFAULTS } from "./engine.js?v=6";
 import { watchCurrent, watchPresets, addEvent, removeEvent, updateEvent, saveSettings, newGame, deleteGame,
-         onConnected, onPending, now, goalCounts, seedIfEmpty } from "./db.js?v=5";
-import { SAMPLE } from "./sample-data.js?v=5";
+         onConnected, onPending, now, goalCounts, seedIfEmpty } from "./db.js?v=6";
+import { SAMPLE } from "./sample-data.js?v=6";
 
 // ---------------------------------------------------------------- state
 let cur = null, presets = null, counts = {}, connected = false, waiting = 0, view = null;
@@ -254,7 +254,7 @@ function rightHTML(v, scr) {
         <div class="r3">
           ${b("pick", "a", `<span>${esc(name("a"))}</span><span>PULL</span>`, { cls: "col big" + (ui.pull === "a" ? " sel" : ui.pull ? " dim" : ""), style: `background:${col("a")}` })}
           ${b("pick", "b", `<span>${esc(name("b"))}</span><span>PULL</span>`, { cls: "col big" + (ui.pull === "b" ? " sel" : ui.pull ? " dim" : ""), style: `background:${col("b")}` })}
-          ${b("ov", "ov", "OVERRIDES", { cls: "darkb med" })}
+          ${b("cancelGame", "", "<span>CANCEL</span><span>GAME</span>", { cls: "col darkb med", confirm: true, danger: true })}
         </div>`, true);
     case "halftime":
     case "suspended": {
@@ -637,6 +637,7 @@ const A = {
   display() { ev({ type: "display", hidden: !view.st.hidden }); },
   newgame() { ui.screen = "new"; ui.ng = { step: 0, t: null, div: null, a: null, b: null, rule: 0, round: 0, sub: 0, darks: 0, left: 0 }; },
   setup() {},
+  cancelGame() { deleteGame(cur.id); ui.pull = null; ui.screen = null; },   // unstarted game: nothing recorded, just remove it
   ngBack() {
     const n = ui.ng;
     if (n.oneOff) { n.oneOff = false; return; }
