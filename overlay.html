@@ -4,22 +4,25 @@
 <meta charset="utf-8">
 <title>Match Overlay</title>
 <style>
-  html,body{margin:0;background:transparent;font-family:-apple-system,system-ui,sans-serif;color:#fff}
-  #wrap{position:absolute;top:16px;left:16px;display:inline-flex;flex-direction:column;gap:6px}
-  #bug{background:rgba(10,10,10,.85);border-radius:10px;overflow:hidden;min-width:300px}
-  .t{display:flex;align-items:center;gap:10px;padding:6px 12px;font-size:26px;font-weight:700}
-  .t img{width:30px;height:30px;object-fit:contain} .t img[src=""]{display:none}
-  .t .nm{flex:1;white-space:nowrap}
-  .t .sc{min-width:40px;text-align:right;font-variant-numeric:tabular-nums;font-size:30px}
-  .t .who{font-size:16px;opacity:.8;min-width:36px;text-align:right}
-  .t.a{border-left:6px solid #1f6feb} .t.b{border-left:6px solid #d97706}
-  #clock{background:#000;text-align:center;padding:6px 12px;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
-  #banner{display:none;background:#ffd33d;color:#000;font-weight:800;font-size:20px;padding:6px 12px;border-radius:8px;text-align:center}
-  #dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:#f55}
+  /* Fixed 1920x1080 canvas, scaled to whatever size the layer is. */
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:-apple-system,system-ui,sans-serif;color:#fff}
+  #stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+  #wrap{position:absolute;top:48px;left:56px;display:flex;flex-direction:column;gap:10px}
+  #bug{background:rgba(10,10,10,.85);border-radius:14px;overflow:hidden;width:520px}
+  .t{display:flex;align-items:center;gap:16px;height:72px;padding:0 20px;font-size:40px;font-weight:700}
+  .t img{width:48px;height:48px;object-fit:contain} .t img[src=""]{display:none}
+  .t .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .t .sc{min-width:64px;text-align:right;font-variant-numeric:tabular-nums;font-size:48px}
+  .t .who{font-size:26px;opacity:.8;min-width:60px;text-align:right}
+  .t.a{border-left:10px solid #1f6feb} .t.b{border-left:10px solid #d97706}
+  #clock{background:#000;text-align:center;height:60px;line-height:60px;font-size:36px;font-weight:700;font-variant-numeric:tabular-nums}
+  #banner{display:none;background:#ffd33d;color:#000;font-weight:800;font-size:32px;padding:10px 20px;border-radius:12px;text-align:center;width:520px;box-sizing:border-box}
+  #dot{position:absolute;top:12px;right:12px;width:12px;height:12px;border-radius:50%;background:#f55}
   #dot.ok{display:none}
 </style>
 </head>
 <body>
+<div id="stage">
 <div id="wrap">
   <div id="bug">
     <div class="t a"><img id="lA" src=""><span class="nm" id="nA"></span><span class="who" id="wA"></span><span class="sc" id="sA">0</span></div>
@@ -29,12 +32,21 @@
   <div id="banner"></div>
 </div>
 <div id="dot"></div>
+</div>
 
 <script type="module">
 import { compute, fmt } from "./engine.js";
 import { watchCurrent, onConnected, now } from "./db.js";
 
 const $ = id => document.getElementById(id);
+
+// Scale the 1920x1080 stage to fit the layer, centred, keeping its proportions.
+function fit() {
+  const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+  const st = $("stage");
+  st.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+}
+addEventListener("resize", fit); fit();
 let cur = null;
 watchCurrent(c => { cur = c; render(); });
 onConnected(ok => { $("dot").className = ok ? "ok" : ""; });
@@ -68,7 +80,7 @@ function render() {
   else if (status === "half" && !s.clockStopsAtHalf) banner = "HALFTIME";
   else if (status !== "universe" && (v.mpA || v.mpB)) banner = "MATCH POINT · " + (v.mpA ? s.teamA : s.teamB);
   $("banner").textContent = banner;
-  $("banner").style.display = banner ? "" : "none";
+  $("banner").style.display = banner ? "block" : "none";
 }
 setInterval(render, 250);
 </script>

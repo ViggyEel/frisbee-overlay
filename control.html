@@ -2,33 +2,46 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Match Control</title>
 <style>
-  :root{--bg:#111;--card:#1d1d1d;--mut:#aaa;--a:#1f6feb;--b:#d97706;--ok:#1a7f37;--bad:#8b1e1e}
+  :root{--bg:#111;--card:#1d1d1d;--mut:#aaa;--a:#1f6feb;--b:#d97706;--ok:#1a7f37;--bad:#8b1e1e;--tabs:52px}
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:#fff;padding:12px 16px 90px}
-  .top{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--mut)}
-  .clock{font-size:56px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;margin:6px 0 0}
-  .status{text-align:center;font-weight:700;color:#ffd33d;min-height:22px}
-  .teams{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
-  .team{background:var(--card);border-radius:14px;padding:10px;text-align:center}
-  .name{font-weight:700;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .score{font-size:64px;font-weight:800;font-variant-numeric:tabular-nums}
-  button{font:inherit;font-weight:700;border:0;border-radius:12px;color:#fff;padding:16px;width:100%;background:#333}
+  html,body{height:100%}
+  body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:#fff;
+       padding:8px max(16px,env(safe-area-inset-right)) calc(var(--tabs) + 8px) max(16px,env(safe-area-inset-left));
+       -webkit-user-select:none;user-select:none}
+  .top{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--mut);height:18px}
+  /* Main screen: landscape scoreboard — team A | clock & controls | team B */
+  .board{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:12px;height:calc(100vh - var(--tabs) - 34px)}
+  .team{background:var(--card);border-radius:14px;padding:8px;display:flex;flex-direction:column;text-align:center;min-height:0}
+  .name{font-weight:700;font-size:4.5vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .score{font-size:22vh;line-height:1;font-weight:800;font-variant-numeric:tabular-nums;margin:2px 0 6px}
+  .plus{flex:1;font-size:9vh;min-height:0}
+  .mid{display:flex;flex-direction:column;gap:6px;min-height:0;justify-content:center}
+  .clock{font-size:14vh;line-height:1;font-weight:800;text-align:center;font-variant-numeric:tabular-nums}
+  .status{text-align:center;font-weight:700;color:#ffd33d;font-size:3.6vh;min-height:4vh}
+  .mid label{margin:2px 0 0}
+  .rotate{display:none;text-align:center;padding:40px 10px;font-size:20px;color:#ffd33d}
+  @media (orientation:portrait){ #main .board{display:none} #main .rotate{display:block} }
+  button{font:inherit;font-weight:700;border:0;border-radius:12px;color:#fff;padding:14px;width:100%;background:#333}
   button:active{opacity:.7} button:disabled{opacity:.35}
-  .plus{font-size:32px;padding:26px 0}
   .pa{background:var(--a)} .pb{background:var(--b)} .go{background:var(--ok)} .stop{background:var(--bad)}
   .row{display:flex;gap:10px;margin-top:12px} .row>*{flex:1}
-  input,select{font:inherit;font-size:18px;padding:12px;border-radius:10px;border:1px solid #444;background:#000;color:#fff;width:100%}
+  input,select{font:inherit;font-size:18px;padding:10px;border-radius:10px;border:1px solid #444;background:#000;color:#fff;width:100%;-webkit-user-select:text;user-select:text}
   label{display:block;margin:12px 0 4px;color:var(--mut);font-size:14px}
   .chk{display:flex;align-items:center;gap:12px;margin-top:12px;font-size:16px}
   .chk input{width:26px;height:26px;flex:0 0 auto}
-  .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:#000;border-top:1px solid #333}
-  .tabs button{border-radius:0;background:none;color:var(--mut);padding:18px 0 24px}
+  .tabs{position:fixed;left:0;right:0;bottom:0;height:var(--tabs);display:flex;background:#000;border-top:1px solid #333;
+        padding:0 env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+  .tabs button{border-radius:0;background:none;color:var(--mut);padding:0}
   .tabs button.on{color:#fff}
   .screen{display:none} .screen.on{display:block}
-  h2{font-size:17px;margin:22px 0 4px}
+  /* Overrides & setup: scrolling columns, readable in landscape */
+  #over,#setup{max-width:760px;margin:0 auto;padding-bottom:16px}
+  #form{display:grid;grid-template-columns:1fr 1fr;column-gap:16px}
+  @media (orientation:portrait){ #form{grid-template-columns:1fr} }
+  h2{font-size:17px;margin:18px 0 4px}
   .hint{color:var(--mut);font-size:13px;margin-top:6px}
 </style>
 </head>
@@ -36,19 +49,22 @@
 <div class="top"><span id="game">No game yet</span><span id="conn">connecting…</span></div>
 
 <section id="main" class="screen on">
-  <div class="clock" id="clock">--:--</div>
-  <div class="status" id="status"></div>
-  <div class="teams">
+  <div class="rotate">Turn the phone sideways to keep score.</div>
+  <div class="board">
     <div class="team"><div class="name" id="nA">Home</div><div class="score" id="sA">0</div>
       <button class="plus pa" id="pA">+1</button></div>
+    <div class="mid">
+      <div class="clock" id="clock">--:--</div>
+      <div class="status" id="status"></div>
+      <label for="scorer">Last point scored by # (optional)</label>
+      <input id="scorer" inputmode="numeric" placeholder="player number">
+      <button class="go" id="startBtn">START CLOCK</button>
+      <button class="stop" id="endBtn" style="display:none">END GAME</button>
+      <div class="hint" id="mainHint"></div>
+    </div>
     <div class="team"><div class="name" id="nB">Away</div><div class="score" id="sB">0</div>
       <button class="plus pb" id="pB">+1</button></div>
   </div>
-  <label for="scorer">Last point scored by # (optional)</label>
-  <input id="scorer" inputmode="numeric" placeholder="player number">
-  <div class="row"><button class="go" id="startBtn">START CLOCK</button></div>
-  <div class="row"><button class="stop" id="endBtn" style="display:none">END GAME</button></div>
-  <div class="hint" id="mainHint"></div>
 </section>
 
 <section id="over" class="screen">
@@ -163,7 +179,7 @@ function render() {
   };
   let txt = STATUS[status];
   if (status === "clock" && (view.mpA || view.mpB)) txt = "MATCH POINT " + (view.mpA ? s.teamA : s.teamB);
-  if (status !== "final" && status !== "pre") txt += `  ·  game to ${st.target}${st.winBy2 ? " (win by 2, cap " + st.cap + ")" : ""}`;
+  if (status !== "final" && status !== "pre") txt += `${txt ? "  ·  " : ""}to ${st.target}${st.winBy2 ? " (win by 2, cap " + st.cap + ")" : ""}`;
   $("status").textContent = txt;
 
   // start / 2nd half / resume button
