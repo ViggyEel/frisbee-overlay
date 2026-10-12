@@ -3,85 +3,37 @@
 <head>
 <meta charset="utf-8">
 <title>Match Overlay</title>
+<!-- Adobe Fonts kit (Bebas Neue Pro). The site's domain must be listed on the kit. -->
+<link rel="stylesheet" href="https://use.typekit.net/mmy7scm.css">
 <style>
-  /* Fixed 1920x1080 canvas, scaled to whatever size the layer is. */
-  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;font-family:-apple-system,system-ui,sans-serif;color:#fff}
-  #stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
-  #wrap{position:absolute;top:48px;left:56px;display:flex;flex-direction:column;gap:10px}
-  #bug{background:rgba(10,10,10,.85);border-radius:14px;overflow:hidden;width:520px}
-  .t{display:flex;align-items:center;gap:16px;height:72px;padding:0 20px;font-size:40px;font-weight:700}
-  .t img{width:48px;height:48px;object-fit:contain} .t img[src=""]{display:none}
-  .t .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .t .sc{min-width:64px;text-align:right;font-variant-numeric:tabular-nums;font-size:48px}
-  .t .who{font-size:26px;opacity:.8;min-width:60px;text-align:right}
-  .t.a{border-left:10px solid #1f6feb} .t.b{border-left:10px solid #d97706}
-  #clock{background:#000;text-align:center;height:60px;line-height:60px;font-size:36px;font-weight:700;font-variant-numeric:tabular-nums}
-  #banner{display:none;background:#ffd33d;color:#000;font-weight:800;font-size:32px;padding:10px 20px;border-radius:12px;text-align:center;width:520px;box-sizing:border-box}
-  #dot{position:absolute;top:12px;right:12px;width:12px;height:12px;border-radius:50%;background:#f55}
-  #dot.ok{display:none}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+  #host{position:absolute;inset:0}
+  #dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#f33;display:none}
 </style>
 </head>
 <body>
-<div id="stage">
-<div id="wrap">
-  <div id="bug">
-    <div class="t a"><img id="lA" src=""><span class="nm" id="nA"></span><span class="who" id="wA"></span><span class="sc" id="sA">0</span></div>
-    <div class="t b"><img id="lB" src=""><span class="nm" id="nB"></span><span class="who" id="wB"></span><span class="sc" id="sB">0</span></div>
-    <div id="clock">--:--</div>
-  </div>
-  <div id="banner"></div>
-</div>
-<div id="dot"></div>
-</div>
-
+<div id="host"></div>
+<div id="dot" title="Not connected to the score database"></div>
 <script type="module">
-import { compute, fmt } from "./engine.js";
+import { compute } from "./engine.js";
 import { watchCurrent, onConnected, now } from "./db.js";
+import { mountOverlay } from "./overlay-core.js";
 
-const $ = id => document.getElementById(id);
+// ?test adds a grey background so the overlay can be checked in a normal browser.
+if (new URLSearchParams(location.search).has("test")) document.body.style.background = "#5a6b52";
 
-// Scale the 1920x1080 stage to fit the layer, centred, keeping its proportions.
-function fit() {
-  const k = Math.min(innerWidth / 1920, innerHeight / 1080);
-  const st = $("stage");
-  st.style.transform = `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
-}
-addEventListener("resize", fit); fit();
+const svgText = await (await fetch("overlay.svg?v=" + Date.now(), { cache: "no-store" })).text();
+const ov = await mountOverlay(document.getElementById("host"), svgText);
+
 let cur = null;
 watchCurrent(c => { cur = c; render(); });
-onConnected(ok => { $("dot").className = ok ? "ok" : ""; });
+onConnected(ok => { document.getElementById("dot").style.display = ok ? "none" : "block"; });
 
 function render() {
-  if (!cur) { $("wrap").style.display = "none"; return; }
-  $("wrap").style.display = "";
-  const v = compute(cur.game.settings, cur.events, now());
-  const { s, st, status } = v;
-
-  $("nA").textContent = s.teamA; $("nB").textContent = s.teamB;
-  if ($("lA").getAttribute("src") !== (s.logoA || "")) $("lA").setAttribute("src", s.logoA || "");
-  if ($("lB").getAttribute("src") !== (s.logoB || "")) $("lB").setAttribute("src", s.logoB || "");
-  $("sA").textContent = st.a; $("sB").textContent = st.b;
-  $("wA").textContent = st.lastPointTeam === "a" && st.lastScorer ? "#" + st.lastScorer : "";
-  $("wB").textContent = st.lastPointTeam === "b" && st.lastScorer ? "#" + st.lastScorer : "";
-
-  // Clock area: universe point / final replace the clock.
-  let clock = (v.cdLabel ? v.cdLabel + " " : "") + fmt(v.remaining);
-  if (status === "universe") clock = "UNIVERSE POINT";
-  else if (status === "final") clock = "FINAL";
-  else if (status === "half" && s.clockStopsAtHalf) clock = "HALFTIME";
-  else if (status === "lastPoint") clock = "LAST POINT";
-  else if (status === "lastPossession") clock = "LAST POSSESSION";
-  else if (status === "paused") clock = "PAUSED";
-  $("clock").textContent = clock;
-
-  // Banner under the scorebug.
-  let banner = "";
-  if (status === "final") banner = st.winner ? (st.winner === "a" ? s.teamA : s.teamB) + " WIN" : "";
-  else if (status === "half" && !s.clockStopsAtHalf) banner = "HALFTIME";
-  else if (status !== "universe" && (v.mpA || v.mpB)) banner = "MATCH POINT · " + (v.mpA ? s.teamA : s.teamB);
-  $("banner").textContent = banner;
-  $("banner").style.display = banner ? "block" : "none";
+  const t = now();
+  ov.update(cur ? compute(cur.game.settings, cur.events, t) : null, t);
 }
+render();
 setInterval(render, 250);
 </script>
 </body>

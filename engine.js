@@ -3,7 +3,11 @@
 
 export const DEFAULTS = {
   tournament: "", label: "",
-  teamA: "Home", teamB: "Away", logoA: "", logoB: "",
+  teamA: "Home", teamB: "Away", barA: "", barB: "",
+  colA: "#2E2E2E", colAText: "#FFFFFF", colB: "#4A4A4A", colBText: "#FFFFFF",
+  darks: "a",            // which team wears darks (score box black); the other is lights
+  eventText: "", eventLogo: "", eventBg: "#ECECEC",
+  showPeriod: true, breakChance: false,
   target: 15, winBy2: false, pointCap: 17,
   halfTarget: 8, halfCapMin: 45, clockStopsAtHalf: false,
   softEnabled: true, softCapMin: 90, softAdd: 1,
@@ -26,6 +30,11 @@ function point(st, s, e, elapsed) {
   st.lastPointKey = e.key;
   st.lastPointTeam = e.team;
   st.lastScorer = e.scorer || null;
+  st.lastPointT = e.t ?? null;
+  st.lastBreak = st.pull != null && e.team === st.pull; // the team that pulled (started on defence) scored
+  if (st.lastBreak) st.breakKeys.push(e.key);
+  st.breakChance = false;
+  st.pull = e.team;                                      // the scoring team pulls next
 
   if (wins(st, e.team)) { st.ended = true; st.winner = e.team; return; }
 
@@ -52,7 +61,11 @@ function point(st, s, e, elapsed) {
 
   // Halftime: by score, or by halftime cap (+1 to higher score).
   if (!st.halfDone) {
-    if (hi >= st.halfTarget) { st.halfDone = true; st.inHalf = true; }
+    if (hi >= st.halfTarget) {
+      st.halfDone = true; st.inHalf = true;
+      // 2nd half: the team that received the first pull now pulls (control can override).
+      if (st.firstPull) st.pull = other(st.firstPull);
+    }
     else if (!st.halfCapApplied && elapsed >= s.halfCapMin * MIN) {
       st.halfCapApplied = true; st.halfTarget = hi + 1;
     }
@@ -69,7 +82,8 @@ export function compute(settings, events, now) {
     halfTarget: s.halfTarget, halfDone: false, halfCapApplied: false, inHalf: false,
     softApplied: false, hardApplied: false, ended: false, winner: null,
     started: false, paused: false, running: false, base: 0, since: 0,
-    lastPointKey: null, lastPointTeam: null, lastScorer: null
+    lastPointKey: null, lastPointTeam: null, lastScorer: null, lastPointT: null, lastBreak: false,
+    pull: null, firstPull: null, breakChance: false, breakKeys: []
   };
   const el = t => st.base + (st.running ? t - st.since : 0);
   const stop = t => { if (st.running) { st.base = el(t); st.running = false; } };
@@ -80,7 +94,10 @@ export function compute(settings, events, now) {
     const t = e.t ?? now;
     switch (e.type) {
       case "start":
+        if (e.pull) { st.pull = e.pull; if (!st.firstPull) st.firstPull = e.pull; }
         st.started = true; st.inHalf = false; st.paused = false; run(t); break;
+      case "breakchance":
+        st.breakChance = !!e.on; break;
       case "pause":
         st.paused = true; stop(t); break;
       case "resume":
@@ -132,7 +149,8 @@ export function compute(settings, events, now) {
   else if (hardPending && s.endRule === "lastPossession") status = "lastPossession";
   else if (hardPending && s.endRule === "lastPoint") status = "lastPoint";
 
-  return { s, st, elapsed, remaining, cdTarget, cdLabel, mpA, mpB, status, hardPending };
+  const period = st.halfDone ? "2ND" : "1ST";
+  return { s, st, elapsed, remaining, cdTarget, cdLabel, mpA, mpB, status, hardPending, period };
 }
 
 export function fmt(ms) {
@@ -146,7 +164,8 @@ export function describe(e, s) {
   switch (e.type) {
     case "point": return `Point ${n[e.team]}` + (e.scorer ? ` (#${e.scorer})` : "");
     case "minus": return `−1 ${n[e.team]}`;
-    case "start": return "Clock started";
+    case "start": return (e.pull ? `Start · ${n[e.pull]} pull` : "Clock started");
+    case "breakchance": return e.on ? "Break chance on" : "Break chance off";
     case "pause": return "Paused";
     case "resume": return "Resumed";
     case "clock_set": return `Clock set (${fmt(e.elapsed)} elapsed)`;

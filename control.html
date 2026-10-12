@@ -58,7 +58,9 @@
       <div class="status" id="status"></div>
       <label for="scorer">Last point scored by # (optional)</label>
       <input id="scorer" inputmode="numeric" placeholder="player number">
+      <select id="pull"><option value="">Who pulls? (choose)</option><option value="a">Team A pulls</option><option value="b">Team B pulls</option></select>
       <button class="go" id="startBtn">START CLOCK</button>
+      <button id="bcBtn" style="display:none">BREAK CHANCE</button>
       <button class="stop" id="endBtn" style="display:none">END GAME</button>
       <div class="hint" id="mainHint"></div>
     </div>
@@ -112,8 +114,17 @@ const FIELDS = [
   ["label", "Game (e.g. Pool A vs Bristol)", "text"],
   ["teamA", "Team A name", "text"],
   ["teamB", "Team B name", "text"],
-  ["logoA", "Team A logo URL (optional)", "text"],
-  ["logoB", "Team B logo URL (optional)", "text"],
+  ["barA", "Team A bar name / code (optional)", "text"],
+  ["barB", "Team B bar name / code (optional)", "text"],
+  ["colA", "Team A colour", "color"],
+  ["colAText", "Team A text colour", "color"],
+  ["colB", "Team B colour", "color"],
+  ["colBText", "Team B text colour", "color"],
+  ["darks", "Who wears darks", "select", [["a", "Team A"], ["b", "Team B"]]],
+  ["eventText", "Event wordmark (blank = no event block)", "text"],
+  ["eventBg", "Event block colour", "color"],
+  ["showPeriod", "Show period (1st/2nd)", "check"],
+  ["breakChance", "Break chance button", "check"],
   ["target", "Game to (points)", "number"],
   ["winBy2", "Win by 2", "check"],
   ["pointCap", "Point cap (only used with win by 2)", "number"],
@@ -134,6 +145,7 @@ $("form").innerHTML = FIELDS.map(([k, lab, type, opts]) => {
   if (type === "check") return `<label class="chk"><input type="checkbox" id="f_${k}">${lab}</label>`;
   if (type === "select") return `<label for="f_${k}">${lab}</label><select id="f_${k}">${
     opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select>`;
+  if (type === "color") return `<label for="f_${k}">${lab}</label><input id="f_${k}" type="color" style="height:48px;padding:4px">`;
   return `<label for="f_${k}">${lab}</label><input id="f_${k}" ${type === "number" ? 'type="number" inputmode="numeric"' : 'type="text"'}>`;
 }).join("");
 
@@ -154,7 +166,7 @@ function readForm() {
 fillForm(DEFAULTS);
 
 // ---- live data
-let cur = null, filledFor = null, lastKeySeen = null, view = null;
+let cur = null, filledFor = null, lastKeySeen = null, view = null, pullTouched = false;
 watchCurrent(c => {
   cur = c;
   if (c && c.id !== filledFor) { fillForm(c.game.settings || DEFAULTS); filledFor = c.id; }
@@ -188,7 +200,17 @@ function render() {
   else if (st.paused) { sb.style.display = ""; sb.textContent = "RESUME CLOCK"; sb.dataset.act = "resume"; }
   else if (!st.started) { sb.style.display = ""; sb.textContent = "START CLOCK"; sb.dataset.act = "start"; }
   else if (st.inHalf && s.clockStopsAtHalf) { sb.style.display = ""; sb.textContent = "START 2ND HALF"; sb.dataset.act = "start"; }
+  else if (st.inHalf) { sb.style.display = ""; sb.textContent = "START 2ND HALF"; sb.dataset.act = "start"; }
   else sb.style.display = "none";
+  const needPull = sb.style.display !== "none" && sb.dataset.act === "start";
+  $("pull").style.display = needPull ? "" : "none";
+  $("pull").options[1].text = s.teamA + " pull"; $("pull").options[2].text = s.teamB + " pull";
+  if (needPull && st.inHalf && !pullTouched && st.pull) $("pull").value = st.pull;   // pre-selected by rule at half
+  if (!needPull) pullTouched = false;
+  const bc = $("bcBtn");
+  bc.style.display = s.breakChance && st.started && !st.ended && !st.inHalf && st.pull ? "" : "none";
+  bc.textContent = st.breakChance ? "BREAK CHANCE — ON (tap to clear)" : "BREAK CHANCE · " + (st.pull === "a" ? s.teamA : s.teamB);
+  bc.style.background = st.breakChance ? "#b8860b" : "";
 
   $("endBtn").style.display = status === "lastPossession" ? "" : "none";
   $("pA").disabled = $("pB").disabled = st.ended;
@@ -213,7 +235,17 @@ setInterval(render, 250);
 const act = e => cur && addEvent(cur.id, e);
 $("pA").onclick = () => act({ type: "point", team: "a" });
 $("pB").onclick = () => act({ type: "point", team: "b" });
-$("startBtn").onclick = e => act({ type: e.target.dataset.act });
+
+$("pull").onchange = () => { pullTouched = true; };
+$("startBtn").onclick = e => {
+  const a = e.target.dataset.act;
+  if (a === "start") {
+    const p = $("pull").value;
+    if (!p) { alert("Choose which team pulls first."); return; }
+    act({ type: "start", pull: p }); $("pull").value = ""; pullTouched = false;
+  } else act({ type: a });
+};
+$("bcBtn").onclick = () => view && act({ type: "breakchance", on: !view.st.breakChance });
 $("endBtn").onclick = $("endNow").onclick = () => { if (confirm("End the game now?")) act({ type: "end" }); };
 $("mA").onclick = () => act({ type: "minus", team: "a" });
 $("mB").onclick = () => act({ type: "minus", team: "b" });
