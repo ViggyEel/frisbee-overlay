@@ -1,0 +1,42 @@
+{
+  "rules": {
+    // Who may do what. People sign in with Google; the "access" list (managed in the admin panel) gives
+    // each email a role: "control" (run games) or "admin" (everything). Emails are stored with "." as ","
+    // because database keys can't contain dots. The stream overlay is public but can only read the live game.
+
+    "current": {
+      ".read": true,
+      ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()"
+    },
+
+    "games": {
+      ".read": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+      "$game": {
+        ".read": "root.child('current').val() == $game",
+        ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()"
+      }
+    },
+
+    "scorers": {
+      ".read": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+      ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()"
+    },
+
+    "presets": {
+      ".read": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+      ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).val() == 'admin'"
+    },
+
+    "access": {
+      ".read": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).val() == 'admin'",
+      ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).val() == 'admin'",
+      "$email": {
+        // Everyone can see their own role. The very first person to sign in may make themselves admin,
+        // but only while the access list is still empty (first-time set-up).
+        ".read": "auth != null && auth.token.email.toLowerCase().replace('.', ',') == $email",
+        ".write": "auth != null && auth.token.email_verified == true && !root.child('access').exists() && auth.token.email.toLowerCase().replace('.', ',') == $email && newData.val() == 'admin'",
+        ".validate": "newData.val() == 'admin' || newData.val() == 'control'"
+      }
+    }
+  }
+}

@@ -3,25 +3,30 @@
 <head>
 <meta charset="utf-8">
 <title>Match Overlay</title>
-<meta name="release" content="d2220696">
+<meta name="release" content="a2bdf975">
 <script type="importmap">
 {
  "imports": {
   "./config.js": "./config.js?v=2470168a",
-  "./db.js": "./db.js?v=f1a8bd86",
-  "./engine.js": "./engine.js?v=62e019ac",
+  "./db.js": "./db.js?v=bf633ce3",
+  "./engine.js": "./engine.js?v=0c06bcfe",
   "./overlay-core.js": "./overlay-core.js?v=70fdbd7d",
   "./release.js": "./release.js?v=dcc06c84",
+  "./rule-fields.js": "./rule-fields.js?v=97ba831e",
   "./sample-data.js": "./sample-data.js?v=a848a2a6",
+  "./gate.js": "./gate.js?v=3e2172f6",
   "./control/buttons.js": "./control/buttons.js?v=35b48dd1",
   "./control/icons.js": "./control/icons.js?v=9b26e8b1",
   "./control/left.js": "./control/left.js?v=8647e0c2",
-  "./control/main.js": "./control/main.js?v=cb36490f",
-  "./control/newgame.js": "./control/newgame.js?v=c1823f36",
-  "./control/overrides.js": "./control/overrides.js?v=058f789d",
+  "./control/main.js": "./control/main.js?v=5f6f5d52",
+  "./control/newgame.js": "./control/newgame.js?v=e24bcb8e",
+  "./control/overrides.js": "./control/overrides.js?v=7d4659b6",
   "./control/scorer.js": "./control/scorer.js?v=4ec0c306",
-  "./control/screens.js": "./control/screens.js?v=e9e80ffe",
-  "./control/state.js": "./control/state.js?v=c290cc04"
+  "./control/screens.js": "./control/screens.js?v=af641c24",
+  "./control/state.js": "./control/state.js?v=c290cc04",
+  "./admin/edit.js": "./admin/edit.js?v=ed0f3224",
+  "./admin/main.js": "./admin/main.js?v=d59c897a",
+  "./admin/state.js": "./admin/state.js?v=af3f7e2a"
  }
 }
 </script>
@@ -30,15 +35,13 @@
 <style>
   html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
   #host{position:absolute;inset:0}
-  #dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#f33;display:none}
 </style>
 </head>
 <body>
 <div id="host"></div>
-<div id="dot" title="Not connected to the score database"></div>
 <script type="module">
 import { compute } from "./engine.js";
-import { watchCurrent, onConnected, now } from "./db.js";
+import { watchCurrent, now } from "./db.js";
 import { mountOverlay } from "./overlay-core.js";
 import { watchRelease, reloadTo } from "./release.js";
 
@@ -50,7 +53,7 @@ const ov = await mountOverlay(document.getElementById("host"), svgText);
 
 let cur = null;
 watchCurrent(c => { cur = c; render(); });
-onConnected(ok => { document.getElementById("dot").style.display = ok ? "none" : "block"; });
+// No connection indicator here: viewers see this layer. The control page shows the connection.
 
 // A newer release was published: reload at the next break in play (or after 15 min at the latest),
 // so the graphics never blink out mid-point.

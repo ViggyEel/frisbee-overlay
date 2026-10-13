@@ -41,7 +41,7 @@ export function rightHTML(v, scr) {
         ${b("newgame", "", "NEW GAME", { cls: "green now", confirm: true })}
         <div class="r3">
           ${b("callOpen", "", "CALL", { cls: "big", off: !has || !st.started })}
-          ${b("setup", "", "SETUP", { cls: "darkb med", off: true })}
+          ${b("setup", "", "ADMIN", { cls: "darkb med" })}
           ${b("ov", "ov", "OVERRIDES", { cls: "darkb med", off: !has })}
         </div>`, true);
     }
@@ -137,7 +137,7 @@ export function rightHTML(v, scr) {
 
 export const gameActions = {
   none() {},
-  setup() {},
+  setup() { location.href = "admin.html"; },
   plus(team, t) {
     if (!app.view || locked()) return;
     if (scorerOn(team)) openScorer(team, t);

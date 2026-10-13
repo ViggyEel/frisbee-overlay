@@ -11,12 +11,18 @@
 //   games/{id}                 { created, settings, events/{key}: { type, t, ... } }
 //   scorers/{id}/{teamId}      { "<player id, or number>": goals } — per game, rewritten by the control page
 //   presets                    { home, divisions, tournaments, players, teams, squads }
+//   access/{email with , for .} "admin" | "control" — who may sign in to the control page / admin panel
+// Who can read and write what: database.rules.json.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, onValue, push, set, remove, update, get }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut as fbSignOut }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { firebaseConfig } from "./config.js";
 
-const db = getDatabase(initializeApp(firebaseConfig));
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
 
 // ---- phone storage -------------------------------------------------------------------------
 const store = {
@@ -33,6 +39,26 @@ export const now = () => Date.now() + offset;
 
 export const onConnected = cb => onValue(ref(db, ".info/connected"), s => cb(!!s.val()));
 
+// ---- sign-in (Google) -------------------------------------------------------------------------
+// Unsent changes wait until the sign-in has been restored, so they are never sent anonymously (and refused).
+const authReady = new Promise(r => { const off = onAuthStateChanged(auth, () => { off(); r(); }); });
+export const onUser = cb => onAuthStateChanged(auth, u => cb(u ? { email: u.email, name: u.displayName } : null));
+export async function signIn() {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  try { await signInWithPopup(auth, provider); }
+  catch (e) { if (/popup/i.test(e.code || "")) await signInWithRedirect(auth, provider); else throw e; }   // pop-ups blocked: go via a page
+}
+export const signOut = () => fbSignOut(auth);
+// Emails are stored with "," for "." (database keys can't contain dots).
+export const emailKey = email => String(email || "").trim().toLowerCase().replaceAll(".", ",");
+export const keyEmail = key => String(key).replaceAll(",", ".");
+export const watchRole = (email, cb) => watch(`access/${emailKey(email)}`, v => cb(v || null));
+export const watchAccess = cb => watch("access", v => cb(v || {}));
+export const setAccess = (email, role) => write(role ? "set" : "remove", `access/${emailKey(email)}`, role || null);
+// First-time set-up: the first person to sign in may make themselves admin while nobody else has access.
+export const claimAdmin = email => set(ref(db, `access/${emailKey(email)}`), "admin");
+
 // ---- the write queue ------------------------------------------------------------------------
 // Each item: { n, op: "set" | "update" | "remove", path, val }. Removed once the server confirms it.
 let queue = store.get("queue", []);
@@ -46,7 +72,8 @@ function changed(path) {
     later(() => { pendingScheduled = false; pendingListeners.forEach(f => f(queue.length)); });
   }
 }
-function send(item) {
+function send(item) { authReady.then(() => sendNow(item)); }
+function sendNow(item) {
   const r = ref(db, item.path);
   const p = item.op === "set" ? set(r, item.val) : item.op === "update" ? update(r, item.val) : remove(r);
   p.then(done, err => {
@@ -181,8 +208,34 @@ export const watchGoals = cb => watch("scorers", all => {
 // ---- presets: tournaments (rule sets, divisions) and teams (squads) -------------------------------
 export const watchPresets = cb => watch("presets", p => cb(p || null));
 export const savePreset = (path, val) => write("set", `presets/${path}`, val);
+export const removePreset = path => write("remove", `presets/${path}`);
+export const newId = () => newKey("presets");                // random id, made on the phone
 
-// Sample data so everything can be tested before real tournaments are entered.
-export async function seedIfEmpty(sample) {
-  try { if (!(await get(ref(db, "presets"))).exists()) write("set", "presets", sample); } catch {}
+// The whole database, straight from the server (needs a connection). Used for the backup download.
+export async function readAll() {
+  const out = {};
+  for (const k of ["current", "games", "scorers", "presets", "access"]) out[k] = (await get(ref(db, k))).val();
+  return out;
 }
+
+// Delete a player from everywhere (privacy): the player, their place in every squad, their name in every
+// game's copy of a squad and on every point they scored, and their goal tallies. Shirt numbers stay.
+// Needs a connection (it has to read every game first); the changes themselves go through the queue.
+export async function deletePlayerEverywhere(pid) {
+  const all = await readAll();
+  write("remove", `presets/players/${pid}`);
+  for (const [sid, Q] of Object.entries(all.presets?.squads || {}))
+    if ((Q.players || []).some(e => e.p === pid)) write("set", `presets/squads/${sid}/players`, Q.players.filter(e => e.p !== pid));
+  for (const [gid, g] of Object.entries(all.games || {})) {
+    for (const side of ["squadA", "squadB"]) {
+      const sq = g.settings?.[side];
+      if (Array.isArray(sq) && sq.some(e => e.p === pid))
+        write("set", `games/${gid}/settings/${side}`, sq.map(e => e.p === pid ? { n: e.n || "", ...(e.cap ? { cap: true } : {}) } : e));
+    }
+    for (const [k, e] of Object.entries(g.events || {}))
+      if (e.scorerId === pid) write("update", `games/${gid}/events/${k}`, { scorerId: null, scorerName: null });
+  }
+  for (const [gid, teams] of Object.entries(all.scorers || {}))
+    for (const [tid, who] of Object.entries(teams || {})) if (who && pid in who) write("remove", `scorers/${gid}/${tid}/${pid}`);
+}
+

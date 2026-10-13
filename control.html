@@ -5,25 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Match Control</title>
-<meta name="release" content="d2220696">
+<meta name="release" content="a2bdf975">
 <script type="importmap">
 {
  "imports": {
   "./config.js": "./config.js?v=2470168a",
-  "./db.js": "./db.js?v=f1a8bd86",
-  "./engine.js": "./engine.js?v=62e019ac",
+  "./db.js": "./db.js?v=bf633ce3",
+  "./engine.js": "./engine.js?v=0c06bcfe",
   "./overlay-core.js": "./overlay-core.js?v=70fdbd7d",
   "./release.js": "./release.js?v=dcc06c84",
+  "./rule-fields.js": "./rule-fields.js?v=97ba831e",
   "./sample-data.js": "./sample-data.js?v=a848a2a6",
+  "./gate.js": "./gate.js?v=3e2172f6",
   "./control/buttons.js": "./control/buttons.js?v=35b48dd1",
   "./control/icons.js": "./control/icons.js?v=9b26e8b1",
   "./control/left.js": "./control/left.js?v=8647e0c2",
-  "./control/main.js": "./control/main.js?v=cb36490f",
-  "./control/newgame.js": "./control/newgame.js?v=c1823f36",
-  "./control/overrides.js": "./control/overrides.js?v=058f789d",
+  "./control/main.js": "./control/main.js?v=5f6f5d52",
+  "./control/newgame.js": "./control/newgame.js?v=e24bcb8e",
+  "./control/overrides.js": "./control/overrides.js?v=7d4659b6",
   "./control/scorer.js": "./control/scorer.js?v=4ec0c306",
-  "./control/screens.js": "./control/screens.js?v=e9e80ffe",
-  "./control/state.js": "./control/state.js?v=c290cc04"
+  "./control/screens.js": "./control/screens.js?v=af641c24",
+  "./control/state.js": "./control/state.js?v=c290cc04",
+  "./admin/edit.js": "./admin/edit.js?v=ed0f3224",
+  "./admin/main.js": "./admin/main.js?v=d59c897a",
+  "./admin/state.js": "./admin/state.js?v=af3f7e2a"
  }
 }
 </script>
@@ -33,6 +38,10 @@
 <body>
 <div id="app"><div id="frame"><div id="left"></div><div id="right"></div></div></div>
 <div id="rotate">TURN THE PHONE SIDEWAYS</div>
-<script type="module">import "./control/main.js";</script>
+<script type="module">
+import { gate } from "./gate.js";
+await gate("control", "MATCH CONTROL");     // signed in and on the access list before anything loads
+await import("./control/main.js");
+</script>
 </body>
 </html>

@@ -16,6 +16,7 @@ export const DEFAULTS = {
   softEnabled: true, softCapMin: 90, softAdd: 1,
   hardEnabled: true, hardCapMin: 105,
   endRule: "lastPoint",                // lastPoint | lastPossession | plusOne
+  drawAllowed: false,                  // at the hard cap a tie ends the game level (no next-point-wins)
   toCount: 2, toPer: "half", toLenSec: 0, toStopsClock: false,
   // features
   breakChance: true, scorer: true, calls: true
@@ -55,6 +56,7 @@ function point(st, s, e, elapsed) {
   if (s.hardEnabled && !st.hardApplied && elapsed >= s.hardCapMin * MIN) {
     st.hardApplied = true;
     st.winBy2 = false;
+    if (tied && s.drawAllowed && s.endRule !== "plusOne") { st.pendingFinal = true; st.pendingWinner = null; return; }
     if (s.endRule === "plusOne" || tied) st.target = hi + 1;
     else { st.pendingFinal = true; st.pendingWinner = st.a > st.b ? "a" : "b"; return; }
   }

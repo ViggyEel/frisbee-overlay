@@ -152,7 +152,7 @@
 
       .st12 {
         fill: #f0c8f0;
-        font-size: 17px;
+        font-size: 21px;
         letter-spacing: .18em;
       }
     </style>
@@ -251,7 +251,7 @@
     <g id="block_subtitle_bg">
       <rect class="st21" x="468" y="1000" width="1074" height="26"/>
     </g>
-    <text id="text_subtitle" class="st12" transform="translate(881.5205 1019)"><tspan x="0" y="0">TOURNAMENT · GAME</tspan></text>
+    <text id="text_subtitle" class="st12" transform="translate(881.5205 1020.5)"><tspan x="0" y="0">TOURNAMENT · GAME</tspan></text>
   </g>
   <g id="tabs">
     <g id="block_tabA">

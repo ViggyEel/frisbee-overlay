@@ -31,7 +31,7 @@ function teamOptions(tid, T, div) {
   return [[tid, T.name, T.col]];
 }
 // The game keeps its own copy of the squad: player id, shirt number in this squad, name, captain.
-const squadCopy = Q => (Q.players || []).map(e => ({ p: e.p, n: e.n || "", name: app.presets.players?.[e.p]?.name || "", ...(e.cap ? { cap: true } : {}) }))
+const squadCopy = Q => (Q.players || []).map(e => ({ p: e.p, n: e.n || "", name: String(app.presets.players?.[e.p]?.name || "").toUpperCase(), ...(e.cap ? { cap: true } : {}) }))
                                         .filter(e => e.name || e.n);
 function teamPick(id) {   // "teamId/squadId" | "teamId" | "oneoff:NAME:#col"
   if (!id) return null;
