@@ -259,21 +259,21 @@
       <g id="block_tabA_bg">
         <polygon class="st22" points="618 884 973.35 884 966.2 918 618 918 618 884"/>
       </g>
-      <text id="text_tabA" class="st11" transform="translate(734.49 908)"><tspan x="0" y="0">TAB MESSAGE</tspan></text>
+      <text id="text_tabA" class="st11" transform="translate(734.49 909.5)"><tspan x="0" y="0">TAB MESSAGE</tspan></text>
     </g>
     <g id="block_tabB">
       <rect id="block_tabB_box" class="st18" x="972.33" y="884" width="322.51" height="34"/>
       <g id="block_tabB_bg">
         <polygon class="st15" points="979.49 884 1302 884 1302 918 972.33 918 979.49 884"/>
       </g>
-      <text id="text_tabB" class="st3" transform="translate(1079.5547 908)"><tspan x="0" y="0">TAB MESSAGE</tspan></text>
+      <text id="text_tabB" class="st3" transform="translate(1079.5547 909.5)"><tspan x="0" y="0">TAB MESSAGE</tspan></text>
     </g>
     <g id="block_centre" class="st24">
       <rect id="block_centre_box" class="st18" x="618" y="884" width="684" height="34"/>
       <g id="block_centre_bg">
         <rect class="st20" x="618" y="884" width="684" height="34"/>
       </g>
-      <text id="text_centre" class="st2" transform="translate(870.92 909)"><tspan x="0" y="0">CENTRE MESSAGE</tspan></text>
+      <text id="text_centre" class="st2" transform="translate(870.92 910)"><tspan x="0" y="0">CENTRE MESSAGE</tspan></text>
     </g>
   </g>
   <metadata>

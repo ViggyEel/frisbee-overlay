@@ -3,6 +3,28 @@
 <head>
 <meta charset="utf-8">
 <title>Match Overlay</title>
+<meta name="release" content="d2220696">
+<script type="importmap">
+{
+ "imports": {
+  "./config.js": "./config.js?v=2470168a",
+  "./db.js": "./db.js?v=f1a8bd86",
+  "./engine.js": "./engine.js?v=62e019ac",
+  "./overlay-core.js": "./overlay-core.js?v=70fdbd7d",
+  "./release.js": "./release.js?v=dcc06c84",
+  "./sample-data.js": "./sample-data.js?v=a848a2a6",
+  "./control/buttons.js": "./control/buttons.js?v=35b48dd1",
+  "./control/icons.js": "./control/icons.js?v=9b26e8b1",
+  "./control/left.js": "./control/left.js?v=8647e0c2",
+  "./control/main.js": "./control/main.js?v=cb36490f",
+  "./control/newgame.js": "./control/newgame.js?v=c1823f36",
+  "./control/overrides.js": "./control/overrides.js?v=058f789d",
+  "./control/scorer.js": "./control/scorer.js?v=4ec0c306",
+  "./control/screens.js": "./control/screens.js?v=e9e80ffe",
+  "./control/state.js": "./control/state.js?v=c290cc04"
+ }
+}
+</script>
 <!-- Adobe Fonts kit (Bebas Neue Pro). The site's domain must be listed on the kit. -->
 <link rel="stylesheet" href="https://use.typekit.net/mmy7scm.css">
 <style>
@@ -15,9 +37,10 @@
 <div id="host"></div>
 <div id="dot" title="Not connected to the score database"></div>
 <script type="module">
-import { compute } from "./engine.js?v=6";
-import { watchCurrent, onConnected, now } from "./db.js?v=6";
-import { mountOverlay } from "./overlay-core.js?v=6";
+import { compute } from "./engine.js";
+import { watchCurrent, onConnected, now } from "./db.js";
+import { mountOverlay } from "./overlay-core.js";
+import { watchRelease, reloadTo } from "./release.js";
 
 // ?test adds a grey background so the overlay can be checked in a normal browser.
 if (new URLSearchParams(location.search).has("test")) document.body.style.background = "#5a6b52";
@@ -29,9 +52,19 @@ let cur = null;
 watchCurrent(c => { cur = c; render(); });
 onConnected(ok => { document.getElementById("dot").style.display = ok ? "none" : "block"; });
 
+// A newer release was published: reload at the next break in play (or after 15 min at the latest),
+// so the graphics never blink out mid-point.
+let updateSince = null, newRelease = null;
+watchRelease(r => { if (!updateSince) { newRelease = r; updateSince = Date.now(); } });
+const BREAKS = ["pre", "final", "half", "suspended", "paused"];
+
 function render() {
   const t = now();
-  ov.update(cur ? compute(cur.game.settings, cur.events, t) : null, t);
+  const v = cur ? compute(cur.game.settings, cur.events, t) : null;
+  if (updateSince && (!v || BREAKS.includes(v.status) || v.st.timeout || v.st.hidden || Date.now() - updateSince > 15 * 60000)) {
+    updateSince = null; reloadTo(newRelease); return;
+  }
+  ov.update(v, t);
 }
 render();
 setInterval(render, 250);

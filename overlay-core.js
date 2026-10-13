@@ -4,8 +4,9 @@
 // Contract: see design/README-design.txt.
 
 const KIT_FAMILY = '"bebas-neue-pro","Bebas Neue Pro","Bebas Neue",Impact,"Arial Narrow",sans-serif';
-const RECENT_MS = 15000;
-const OUTCOME_MS = 6000;   // how long UNCONTESTED / CONTESTED / RETRACTED stays up     // how long BREAK / scorer number stay up after a point
+const RECENT_MS = 15000;    // how long BREAK / POINT · scorer stay up after a point
+const OUTCOME_MS = 6000;    // how long UNCONTESTED / CONTESTED / RETRACTED stays up
+const FONT_WAIT_MS = 3000;  // longest the first draw waits for the font; text is re-placed when it arrives
 const NAME_MIN = 24;         // smallest font size a team name may shrink to before squeezing
 
 // Colour tokens in the design file → role names (design/colour-roles.json).
@@ -64,12 +65,11 @@ export async function mountOverlay(host, svgText) {
   svg.querySelectorAll("text").forEach(t => {
     if (/bebas/i.test(getComputedStyle(t).fontFamily)) t.style.fontFamily = KIT_FAMILY;
   });
-  await Promise.race([
-    Promise.all(["400", "600", "700"].map(w => document.fonts.load(`${w} 40px bebas-neue-pro`).catch(() => {}))),
-    new Promise(r => setTimeout(r, 6000))
-  ]);
+  const fontLoads = Promise.all(["400", "600", "700"].map(w => document.fonts.load(`${w} 40px bebas-neue-pro`).catch(() => {})));
+  await Promise.race([fontLoads, new Promise(r => setTimeout(r, FONT_WAIT_MS))]);
   // Placeholder text can only be measured reliably in the real font.
-  const fontOK = [...document.fonts].some(f => /bebas-neue-pro/i.test(f.family) && f.status === "loaded");
+  const hasFont = () => [...document.fonts].some(f => /bebas-neue-pro/i.test(f.family) && f.status === "loaded");
+  let fontOK = hasFont();
 
   // ---- colour tokens: remember which element/property carries which role
   const painted = [];
@@ -105,20 +105,23 @@ export async function mountOverlay(host, svgText) {
   // Blocks the designer hid (e.g. the centre message) must be rendered to be measured and shown.
   ["block_tabA", "block_tabB", "block_centre"].forEach(id => { const b = $(id); if (b) b.style.display = "inline"; });
 
-  // ---- live text: re-anchor where the designer placed the placeholder
+  // ---- live text: re-anchor where the designer placed the placeholder.
+  // A hidden copy of each placeholder is kept, so the anchor can be measured again if the font arrives late.
   const T = {};
+  const anchorX = (ghost, anchor) => { const bb = ghost.getBBox(); return anchor === "start" ? bb.x : anchor === "end" ? bb.x + bb.width : bb.x + bb.width / 2; };
   for (const [id, anchor] of Object.entries(LIVE_TEXT)) {
     const el = $(id); if (!el) continue;
-    const bb = el.getBBox();
+    const ghost = el.cloneNode(true); ghost.removeAttribute("id"); ghost.setAttribute("visibility", "hidden"); ghost.setAttribute("aria-hidden", "true");
+    el.parentNode.insertBefore(ghost, el);
     const ts = el.querySelector("tspan");
     const y = Number(ts?.getAttribute("y") ?? el.getAttribute("y") ?? 0);
-    let x = anchor === "start" ? bb.x : anchor === "end" ? bb.x + bb.width : bb.x + bb.width / 2;
-    if (!fontOK) x = geomAnchor(id, anchor, el, bb) ?? x;
+    let x = anchorX(ghost, anchor);
+    if (!fontOK) x = geomAnchor(id, anchor, el, el.getBBox()) ?? x;
     el.replaceChildren(document.createTextNode(""));
     el.setAttribute("x", x); el.setAttribute("y", y); el.setAttribute("text-anchor", anchor);
     const box = $(id.replace("text_", "block_") + "_box");
     const fit = Number(el.getAttribute("data-fit")) || (box ? box.getBBox().width - 32 : 0);
-    T[id] = { el, size: parseFloat(getComputedStyle(el).fontSize), fit, fullFit: fit, val: null };
+    T[id] = { el, ghost, anchor, size: parseFloat(getComputedStyle(el).fontSize), fit, fullFit: fit, val: null };
   }
 
   // ---- wrappers so animations never fight transforms written by the design app
@@ -162,6 +165,32 @@ export async function mountOverlay(host, svgText) {
     const stops = [...(svg.getElementById(m[1])?.querySelectorAll("stop") || [])];
     return stops.length > 0 && stops.every(s => toHex(getComputedStyle(s).stopColor) === "#000000");
   };
+  // Shadows at a slanted join (under the score boxes) are drawn as upright rectangles, so their shading
+  // runs straight across while the edge is diagonal. Skew each one to the slant (read from the score
+  // shapes) so the shading runs parallel to the edge. Shadows at upright joins are left alone.
+  const slants = [];
+  for (const id of ["block_scoreA_bg", "block_scoreB_bg"]) $(id)?.querySelectorAll("polygon").forEach(poly => {
+    const n = poly.getAttribute("points").trim().split(/[\s,]+/).map(Number), P = [];
+    for (let i = 0; i + 1 < n.length; i += 2) P.push([n[i], n[i + 1]]);
+    for (let i = 0; i < P.length - 1; i++) {
+      const a = P[i], b = P[i + 1];
+      if (a[0] !== b[0] && a[1] !== b[1]) slants.push(a[1] < b[1] ? [a, b] : [b, a]);    // [top, bottom]
+    }
+  });
+  svg.querySelectorAll('[id$="_bg"] rect, [id$="_bg"] polygon').forEach(el => {
+    if (el.closest("#block_scoreA_bg, #block_scoreB_bg") || !isShadow(el)) return;
+    const bb = el.getBBox();
+    for (const [top, bot] of slants) {
+      if (Math.abs(top[1] - bb.y) > 1 || Math.abs(bot[1] - bb.y - bb.height) > 1) continue;
+      let y0 = null;                                  // the height where the shadow's edge already meets the slant
+      for (const x of [bb.x, bb.x + bb.width]) { if (Math.abs(x - top[0]) < 1) y0 = top[1]; else if (Math.abs(x - bot[0]) < 1) y0 = bot[1]; }
+      if (y0 == null) continue;
+      const k = (bot[0] - top[0]) / (bot[1] - top[1]);  // sideways shift per pixel down the slant
+      el.setAttribute("transform", `matrix(1 0 ${k} 1 ${-k * y0} 0) ${el.getAttribute("transform") || ""}`.trim());
+      break;
+    }
+  });
+
   const periodShadow = document.createElementNS(SVGNS, "g");
   $("block_period_bg")?.querySelectorAll("*").forEach(el => { if (isShadow(el)) periodShadow.appendChild(el.cloneNode(true)); });
   periodShadow.style.transition = "opacity .35s ease"; periodShadow.style.opacity = "0";
@@ -203,9 +232,11 @@ export async function mountOverlay(host, svgText) {
     w.dataset.shown = want;
     w.style.transform = on ? "translateY(0px)" : `translateY(${tabDrop}px)`;
   };
+  // A new message fades in; a countdown in the same message ticking down does not.
+  const kind = s => String(s || "").replace(/\d+:\d\d/g, "");
   const tab = (id, txt) => {
-    const tid = id.replace("block_", "text_");
-    if (txt) { const changed = set(tid, txt); if (changed && W[id].dataset.shown === "1") pop(T[tid]?.el); }
+    const tid = id.replace("block_", "text_"), was = T[tid]?.val;
+    if (txt) { const changed = set(tid, txt); if (changed && W[id].dataset.shown === "1" && kind(was) !== kind(txt)) pop(T[tid]?.el); }
     show(id, !!txt);
   };
 
@@ -258,20 +289,30 @@ export async function mountOverlay(host, svgText) {
     };
   }
 
+  // Only touch what changed: colours are repainted when a colour changes, styles when their value changes.
+  let painted0 = "";
   function paint(roles) {
+    const j = JSON.stringify(roles); if (j === painted0) return; painted0 = j;
     for (const { el, p, role } of painted) if (roles[role]) el.style[p] = roles[role];
   }
-  function refit() { for (const id of ["text_nameA", "text_nameB"]) if (T[id] && T[id].val) fitText(T[id]); }
-  document.fonts?.addEventListener?.("loadingdone", refit);
+  const css = (el, prop, v) => { if (el && el.style[prop] !== v) el.style[prop] = v; };
+  function refit() { for (const [id, t] of Object.entries(T)) if (t.val && t.fit && /text_(name|tab|centre)/.test(id)) fitText(t); }
+  // The font arrived after the first draw: put every text back where the designer placed it, then refit.
+  function fontArrived() {
+    if (!fontOK && hasFont()) { fontOK = true; for (const t of Object.values(T)) t.el.setAttribute("x", anchorX(t.ghost, t.anchor)); }
+    refit();
+  }
+  fontLoads.then(fontArrived);
+  document.fonts?.addEventListener?.("loadingdone", fontArrived);
 
   let lastScores = null;
 
   function update(v, now) {
     // No game, or HIDE SCOREBOARD from the control page: everything slides away.
-    if (!v || v.st.hidden) { W.scorebar && (W.scorebar.style.opacity = "0"); if (W.block_subtitle) W.block_subtitle.style.opacity = "0";
+    if (!v || v.st.hidden) { css(W.scorebar, "opacity", "0"); css(W.block_subtitle, "opacity", "0");
               ["block_tabA", "block_tabB", "block_centre"].forEach(id => show(id, false)); return; }
     const { s, st, status } = v;
-    W.scorebar && (W.scorebar.style.opacity = "1");
+    css(W.scorebar, "opacity", "1");
 
     // colours
     const kitA = s.darks === "b" ? KIT.light : KIT.dark, kitB = s.darks === "b" ? KIT.dark : KIT.light;
@@ -305,26 +346,26 @@ export async function mountOverlay(host, svgText) {
     if (logo) {
       const href = s.eventLogo || "";
       if (logo.getAttribute("href") !== href) { logo.setAttribute("href", href); logo.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", href); }
-      logo.style.display = hasLogo ? "" : "none";
+      css(logo, "display", hasLogo ? "" : "none");
     }
-    if (T.text_event) { T.text_event.el.style.display = hasLogo ? "none" : ""; set("text_event", String(s.eventText || "").toUpperCase()); }
-    if (W.block_event) W.block_event.style.opacity = hasEvent ? "1" : "0";
+    if (T.text_event) { css(T.text_event.el, "display", hasLogo ? "none" : ""); set("text_event", String(s.eventText || "").toUpperCase()); }
+    css(W.block_event, "opacity", hasEvent ? "1" : "0");
 
     const showPeriod = v.showPeriod && !!bar.period;
-    if (W.block_period) W.block_period.style.opacity = showPeriod ? "1" : "0";
-    if (W.block_clock && bar.period) W.block_clock.style.transform = showPeriod ? "translateX(0px)" : `translateX(${-bar.period.width}px)`;
-    periodShadow.style.opacity = showPeriod ? "0" : "1";
+    css(W.block_period, "opacity", showPeriod ? "1" : "0");
+    if (bar.period) css(W.block_clock, "transform", showPeriod ? "translateX(0px)" : `translateX(${-bar.period.width}px)`);
+    css(periodShadow, "opacity", showPeriod ? "0" : "1");
 
     // subtitle strip spans the visible bar
     const L = hasEvent ? bar.event.x : bar.nameA.x;
     const R = (bar.clock.x + bar.clock.width) - (showPeriod ? 0 : (bar.period?.width || 0));
     if (subBg && bar.sub) {
       const k = (R - L) / bar.sub.width;
-      subBg.style.transform = `translate(${L - bar.sub.x * k}px,0px) scale(${k},1)`;
+      css(subBg, "transform", `translate(${L - bar.sub.x * k}px, 0px) scale(${k}, 1)`);
     }
     const sub = [s.tournament, s.division, s.label].filter(Boolean).join("  ·  ").toUpperCase();
     set("text_subtitle", sub);
-    if (W.block_subtitle) W.block_subtitle.style.opacity = sub ? "1" : "0";
+    css(W.block_subtitle, "opacity", sub ? "1" : "0");
 
     // centre message overrides the team tabs
     const mmssOf = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };

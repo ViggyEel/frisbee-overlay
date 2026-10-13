@@ -4,7 +4,7 @@
 
 export const DEFAULTS = {
   tournament: "", division: "", label: "",
-  teamA: "Home", teamB: "Away", barA: "", barB: "",
+  teamA: "", teamB: "", barA: "", barB: "",
   colA: "#2E2E2E", colAText: "#FFFFFF", colB: "#4A4A4A", colBText: "#FFFFFF",
   squadA: null, squadB: null,          // [{ n: "7", name: "ALEX", cap: true }, …] or null
   darks: "a",                          // which team wears darks (score box black); the other is lights
@@ -16,7 +16,7 @@ export const DEFAULTS = {
   softEnabled: true, softCapMin: 90, softAdd: 1,
   hardEnabled: true, hardCapMin: 105,
   endRule: "lastPoint",                // lastPoint | lastPossession | plusOne
-  toCount: 2, toPer: "half", toLenSec: 0,
+  toCount: 2, toPer: "half", toLenSec: 0, toStopsClock: false,
   // features
   breakChance: true, scorer: true, calls: true
 };
@@ -99,22 +99,28 @@ export function compute(settings, events, now) {
     log: []                                            // processed events with elapsed + score, for lists
   };
   const el = t => st.base + (st.running ? t - st.since : 0);
-  const stop = t => { if (st.running) { st.base = el(t); st.running = false; } };
-  const run = t => { if (!st.running) { st.since = t; st.running = true; } };
+  // The clock runs whenever nothing is stopping it; checked after every event.
+  const shouldRun = () => st.started && !st.ended && !st.pendingFinal && !st.paused && !st.suspended &&
+    !(st.inHalf && s.clockStopsAtHalf) && !(st.timeout && s.toStopsClock);
+  const sync = t => {
+    if (shouldRun()) { if (!st.running) { st.since = t; st.running = true; } }
+    else if (st.running) { st.base = el(t); st.running = false; }
+  };
 
-  // "void" events remove another event (e.g. a call that takes a goal away). Everything after recalculates.
-  const voided = new Set(events.filter(e => e.type === "void" && e.ref).map(e => e.ref));
+  // A call outcome can take a point away ("removed": that point's key). Delete the outcome and the
+  // point comes back. Everything after recalculates.
+  const voided = new Set(events.filter(e => e.type === "call_outcome" && e.removed).map(e => e.removed));
 
   for (const e of events) {
     if (st.ended && !["display", "call", "call_outcome"].includes(e.type)) continue;
-    if (voided.has(e.key) || e.type === "void") continue;
+    if (voided.has(e.key)) continue;
     // After a winning point only calls, the confirmation, END GAME and display changes count.
     if (st.pendingFinal && !["confirm_final", "end", "call", "call_outcome", "display"].includes(e.type)) continue;
     const t = e.t ?? now;
     switch (e.type) {
       case "start":
         if (e.pull) { st.pull = e.pull; if (!st.firstPull) st.firstPull = e.pull; }
-        st.started = true; st.inHalf = false; st.paused = false; st.suspended = false; run(t); break;
+        st.started = true; st.inHalf = false; st.paused = false; st.suspended = false; break;
       case "pull_set":
         // Correction: who is pulling this point. Before the first point it also fixes who pulled first.
         st.pull = e.team;
@@ -122,12 +128,12 @@ export function compute(settings, events, now) {
         st.breakChance = false;
         break;
       case "confirm_final":
-        if (st.pendingFinal) { st.ended = true; st.winner = st.pendingWinner; st.pendingFinal = false; stop(t); }
+        if (st.pendingFinal) { st.ended = true; st.winner = st.pendingWinner; st.pendingFinal = false; }
         break;
       case "suspend":
-        st.suspended = true; st.paused = false; stop(t); break;
+        st.suspended = true; st.paused = false; break;
       case "half":
-        if (!st.halfDone) { startHalf(st, t); if (s.clockStopsAtHalf) stop(t); }
+        if (!st.halfDone) startHalf(st, t);
         break;
       case "breakchance":
         st.breakChance = !!e.on; break;
@@ -145,24 +151,20 @@ export function compute(settings, events, now) {
       case "display":
         st.hidden = !!e.hidden; break;
       case "pause":
-        st.paused = true; stop(t); break;
+        st.paused = true; break;
       case "resume":
-        st.paused = false;
-        if (st.started && !(st.inHalf && s.clockStopsAtHalf)) run(t);
-        break;
+        st.paused = false; break;
       case "clock_set":
         st.base = Number(e.elapsed); if (st.running) st.since = t; break;
-      case "minus":
-        if (st[e.team] > 0) st[e.team]--; break;
       case "end":
-        st.ended = true; st.pendingFinal = false; stop(t);
+        st.ended = true; st.pendingFinal = false;
         st.winner = st.a === st.b ? null : (st.a > st.b ? "a" : "b");
         break;
       case "point":
         point(st, s, e, el(t));
-        if (st.pendingFinal || (st.inHalf && s.clockStopsAtHalf)) stop(t);
         break;
     }
+    sync(t);
     st.log.push({ e, el: el(t), a: st.a, b: st.b, brk: e.type === "point" && st.breakKeys.includes(e.key) });
   }
 
@@ -230,7 +232,6 @@ export function describe(e, s, brk) {
   const scorer = e.scorer ? ` · #${e.scorer}${e.scorerName ? " " + e.scorerName : ""}` : (e.scorerName ? ` · ${e.scorerName}` : "");
   switch (e.type) {
     case "point": return `POINT ${who(e.team)}${scorer}${brk ? " · BREAK" : ""}`;
-    case "minus": return `−1 ${who(e.team)}`;
     case "start": return e.pull ? `START · ${who(e.pull)} PULL` : "START";
     case "pull_set": return `PULL · ${who(e.team)}`;
     case "half": return "HALFTIME CALLED";
@@ -239,7 +240,7 @@ export function describe(e, s, brk) {
     case "timeout": return `TIMEOUT ${who(e.team)}`;
     case "timeout_end": return "TIMEOUT OVER";
     case "call": return `${who(e.team)} CALLED ${e.call}`;
-    case "call_outcome": return e.outcome + (e.removedPoint ? " · POINT REMOVED" : "");
+    case "call_outcome": return e.outcome + (e.removed ? " · POINT REMOVED" : "");
     case "display": return e.hidden ? "SCOREBOARD HIDDEN" : "SCOREBOARD SHOWN";
     case "breakchance": return e.on ? "BREAK CHANCE" : "BREAK CHANCE OFF";
     case "pause": return "CLOCK PAUSED";
