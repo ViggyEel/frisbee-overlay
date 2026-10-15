@@ -27,6 +27,12 @@
       ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).val() == 'admin'"
     },
 
+    "locks": {
+      // Which device has the control page / the admin panel open (one at a time).
+      ".read": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
+      ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()"
+    },
+
     "access": {
       ".read": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).val() == 'admin'",
       ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).val() == 'admin'",

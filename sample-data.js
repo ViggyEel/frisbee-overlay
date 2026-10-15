@@ -24,7 +24,6 @@ const id = name => "p_" + name.toLowerCase();
 const S = (name, n, cap) => ({ p: id(name), n, ...(cap ? { cap: true } : {}) });
 
 export const SAMPLE = {
-  home: "skunks",
   divisions: {
     open: { name: "Open", order: 1 }, womens: { name: "Women's", order: 2 }, mixed: { name: "Mixed", order: 3 },
     beginners: { name: "Beginners", order: 4 }

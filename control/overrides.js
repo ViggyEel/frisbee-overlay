@@ -65,8 +65,8 @@ export function clockHTML(v) {
 export function rulesHTML(v) {
   if (!ui.rules) ui.rules = { ...v.s };
   const r = ui.rules, o = v.s;
-  const show = (d, x) => d[2] === "bool" ? (x ? "ON" : "OFF") : d[2] === "opt" ? (d[3].find(z => z[0] == x) || d[3][0])[1]
-    : d[2] === "min" ? x + " MIN" : d[2] === "mmss" ? `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}` : String(x);
+  const show = (d, x) => d[2] === "bool" ? (x ? "ON" : "OFF") : d[2] === "opt" ? (d[3].find(z => z[0] == x) || [x, String(x)])[1]
+    : d[2] === "min" ? x + " MIN" : d[2] === "mmss" ? (d[0] === "toLenSec" && !x ? "UNTIMED" : `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`) : String(x);
   const rows = RULES.map((d, i) => {
     const off = d[4] && !r[d[4]];
     const changed = String(r[d[0]]) !== String(o[d[0]]);
@@ -104,7 +104,10 @@ export const overrideActions = {
   del(key) {
     const log = app.view.st.log;
     // Deleting the game's first START deletes the whole game (useful for tests).
-    if (log[0]?.e.key === key && log[0].e.type === "start") { deleteGame(app.cur.id); ui.screen = null; return; }
+    if (log[0]?.e.key === key && log[0].e.type === "start") {
+      if (log.some(l => l.e.type === "point")) return;           // not once the game is under way: too easy to lose a match
+      deleteGame(app.cur.id); ui.screen = null; return;
+    }
     removeEvent(app.cur.id, key);       // deleting a call outcome that removed a point brings the point back
   },
   fixScorer(key) { correctScorer(key); },
@@ -128,7 +131,11 @@ export const overrideActions = {
   rule(arg) {
     const [i, d] = arg.split(":").map(Number), def = RULES[i], r = ui.rules, k = def[0];
     if (def[2] === "bool") r[k] = !r[k];
-    else if (def[2] === "opt") { const o = def[3], j = o.findIndex(z => z[0] == r[k]); r[k] = o[(j + d + o.length) % o.length][0]; }
+    else if (def[2] === "opt") {
+      const o = def[3]; let j = o.findIndex(z => z[0] == r[k]);
+      if (j < 0 && typeof o[0][0] === "number") j = o.filter(z => z[0] <= Number(r[k])).length - (d > 0 ? 1 : 0);   // not an option: step from where it sits
+      r[k] = o[((j + d) % o.length + o.length) % o.length][0];
+    }
     else r[k] = Math.max(0, Number(r[k]) + d * def[3]);
   },
   rulesSave() { const keep = Object.fromEntries(RULES.map(d => [d[0], ui.rules[d[0]]])); saveSettings(app.cur.id, { ...app.cur.game.settings, ...keep }); ui.rules = null; },

@@ -17,7 +17,7 @@ export const DEFAULTS = {
   hardEnabled: true, hardCapMin: 105,
   endRule: "lastPoint",                // lastPoint | lastPossession | plusOne
   drawAllowed: false,                  // at the hard cap a tie ends the game level (no next-point-wins)
-  toCount: 2, toPer: "half", toLenSec: 0, toStopsClock: false,
+  toCount: 2, toPer: "half", toLenSec: 0, toStopsClock: false,   // toCount -1 = unlimited · toLenSec 0 = untimed
   // features
   breakChance: true, scorer: true, calls: true
 };
@@ -45,6 +45,8 @@ function point(st, s, e, elapsed) {
   if (st.lastBreak) st.breakKeys.push(e.key);
   st.breakChance = false;
   st.pull = e.team;                                      // the scoring team pulls next
+  st.timeout = null;                                     // a point means any timeout and any open call are over
+  st.call = null;                                        // (easy to forget to close them in the moment)
 
   // Winning point: the game is NOT over yet — a call can still take the goal away.
   // It ends only when the camera person taps CONFIRM FINAL ("confirm_final" event).
@@ -87,6 +89,8 @@ function startHalf(st, t) {
 export function compute(settings, events, now) {
   const s = { ...DEFAULTS, ...(settings || {}) };
   for (const k of NUMS) s[k] = Number(s[k]) || 0;
+  // Settings where 0 (or blank) makes no sense fall back to the defaults (a blank hard cap would end the game at once).
+  for (const k of ["target", "pointCap", "halfTarget", "halfCapMin", "softCapMin", "softAdd", "hardCapMin"]) if (!(s[k] > 0)) s[k] = DEFAULTS[k];
 
   const st = {
     a: 0, b: 0, target: s.target, cap: s.pointCap, winBy2: !!s.winBy2,
@@ -111,7 +115,18 @@ export function compute(settings, events, now) {
 
   // A call outcome can take a point away ("removed": that point's key). Delete the outcome and the
   // point comes back. Everything after recalculates.
-  const voided = new Set(events.filter(e => e.type === "call_outcome" && e.removed).map(e => e.removed));
+  // Failsafe: only if that point was the last thing recorded before the call (hiding the scoreboard and
+  // confirming the final aside). Anything else in between means the call wasn't about that point.
+  const NEUTRAL = ["display", "confirm_final"];
+  const canRemove = (o, i) => {
+    const p = events.findIndex(e => e.key === o.removed);
+    if (p < 0 || p > i || events[p].type !== "point") return false;
+    let c = -1; for (let j = i - 1; j > p; j--) if (events[j].type === "call") { c = j; break; }
+    if (c < 0) return false;
+    for (let j = p + 1; j < c; j++) if (!NEUTRAL.includes(events[j].type)) return false;
+    return true;
+  };
+  const voided = new Set(events.map((e, i) => e.type === "call_outcome" && e.removed && canRemove(e, i) ? e.removed : null).filter(Boolean));
 
   for (const e of events) {
     if (st.ended && !["display", "call", "call_outcome"].includes(e.type)) continue;
@@ -122,7 +137,7 @@ export function compute(settings, events, now) {
     switch (e.type) {
       case "start":
         if (e.pull) { st.pull = e.pull; if (!st.firstPull) st.firstPull = e.pull; }
-        st.started = true; st.inHalf = false; st.paused = false; st.suspended = false; break;
+        st.started = true; st.inHalf = false; st.paused = false; st.suspended = false; st.timeout = null; break;
       case "pull_set":
         // Correction: who is pulling this point. Before the first point it also fixes who pulled first.
         st.pull = e.team;
@@ -135,7 +150,7 @@ export function compute(settings, events, now) {
       case "suspend":
         st.suspended = true; st.paused = false; break;
       case "half":
-        if (!st.halfDone) startHalf(st, t);
+        if (!st.halfDone) { startHalf(st, t); st.timeout = null; }
         break;
       case "breakchance":
         st.breakChance = !!e.on; break;
@@ -148,7 +163,7 @@ export function compute(settings, events, now) {
       case "call":
         st.call = { team: e.team, call: e.call, t, key: e.key }; break;
       case "call_outcome":
-        if (st.call) st.lastOutcome = { ...st.call, outcome: e.outcome, t, key: e.key };
+        if (st.call) st.lastOutcome = { ...st.call, callKey: st.call.key, outcome: e.outcome, removed: !!e.removed && voided.has(e.removed), t, key: e.key };
         st.call = null; break;
       case "display":
         st.hidden = !!e.hidden; break;
@@ -167,7 +182,9 @@ export function compute(settings, events, now) {
         break;
     }
     sync(t);
-    st.log.push({ e, el: el(t), a: st.a, b: st.b, brk: e.type === "point" && st.breakKeys.includes(e.key) });
+    // an outcome that asked to remove a point the failsafe kept says so in the lists
+    const shown = e.type === "call_outcome" && e.removed && !voided.has(e.removed) ? { ...e, removed: undefined, removeBlocked: true } : e;
+    st.log.push({ e: shown, el: el(t), a: st.a, b: st.b, brk: e.type === "point" && st.breakKeys.includes(e.key) });
   }
 
   const elapsed = el(now);
@@ -208,7 +225,8 @@ export function compute(settings, events, now) {
   const halfButton = live && !st.halfDone && s.halfEnabled !== false &&
     elapsed >= s.halfCapMin * MIN - s.halfWindowSec * 1000;
   const half = st.halfDone ? 1 : 0;
-  const toLeft = team => s.toCount <= 0 ? 0 :
+  // toCount < 0: unlimited (Infinity left); 0: none
+  const toLeft = team => s.toCount < 0 ? Infinity : s.toCount === 0 ? 0 :
     Math.max(0, s.toCount - (s.toPer === "game" ? st.toUsed[team][0] + st.toUsed[team][1] : st.toUsed[team][half]));
   const timeoutsLeft = { a: toLeft("a"), b: toLeft("b") };
 
@@ -242,7 +260,7 @@ export function describe(e, s, brk) {
     case "timeout": return `TIMEOUT ${who(e.team)}`;
     case "timeout_end": return "TIMEOUT OVER";
     case "call": return `${who(e.team)} CALLED ${e.call}`;
-    case "call_outcome": return e.outcome + (e.removed ? " · POINT REMOVED" : "");
+    case "call_outcome": return e.outcome + (e.removed ? " · POINT REMOVED" : e.removeBlocked ? " · POINT KEPT" : "");
     case "display": return e.hidden ? "SCOREBOARD HIDDEN" : "SCOREBOARD SHOWN";
     case "breakchance": return e.on ? "BREAK CHANCE" : "BREAK CHANCE OFF";
     case "pause": return "CLOCK PAUSED";

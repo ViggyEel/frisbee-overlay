@@ -23,5 +23,5 @@ export const scorerOn = t => S().scorer !== false && !!squadOf(t);
 export const ev = (e, t) => app.cur && addEvent(app.cur.id, e, t ?? now());
 // After a winning point nothing but CALL, CONFIRM FINAL, UNDO and END GAME is possible.
 export const locked = () => !!app.view?.st.pendingFinal;
-// Any touch keeps the scorer picker's countdown alive.
-export const touch = () => { if (ui.scorer) ui.scorer.idleAt = Date.now(); };
+// Any touch in the scorer picker stops its timer for good.
+export const touch = () => { if (ui.scorer) ui.scorer.stopped = true; };

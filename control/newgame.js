@@ -1,4 +1,4 @@
-// NEW GAME: tournament → division → our squad (or NOT US) → opponent → details → CREATE GAME.
+// NEW GAME: tournament → division → first team → second team → details → CREATE GAME.
 // Picks are single taps that advance; BACK steps back; the left third shows a summary.
 // Squads are offered only for the chosen division; every team is always available.
 // A squad is shown by its own name ("Skunks 2"); a team without a matching squad by the team's name.
@@ -24,14 +24,11 @@ const ordered = o => Object.entries(o || {}).sort(([, x], [, y]) => ((x.order ??
 const divName = id => app.presets.divisions?.[id]?.name ?? id;      // older data stored the name itself
 // A squad plays in the division if it lists it, or lists none.
 const playsIn = (Q, div) => !Q.divisions?.length || Q.divisions.includes(div);
-// Every pickable side for this division: each squad of the team that plays in it, or the team itself.
-function teamOptions(tid, T, div) {
-  const sq = ordered(app.presets.squads).filter(([, Q]) => Q.team === tid && playsIn(Q, div));
-  if (sq.length) return sq.map(([sid, Q]) => [tid + "/" + sid, Q.name, Q.col || T.col]);
-  return [[tid, T.name, T.col]];
-}
+// A team's squads that play this division (picked from a second, short list after tapping the team).
+const squadsOf = (tid, div) => ordered(app.presets.squads).filter(([, Q]) => Q.team === tid && playsIn(Q, div));
 // The game keeps its own copy of the squad: player id, shirt number in this squad, name, captain.
-const squadCopy = Q => (Q.players || []).map(e => ({ p: e.p, n: e.n || "", name: String(app.presets.players?.[e.p]?.name || "").toUpperCase(), ...(e.cap ? { cap: true } : {}) }))
+// (an entry may be a number with no player: then there's no id and no name)
+const squadCopy = Q => (Q.players || []).filter(e => e.p || e.n).map(e => ({ ...(e.p ? { p: e.p } : {}), n: e.n || "", name: String(app.presets.players?.[e.p]?.name || "").toUpperCase(), ...(e.cap ? { cap: true } : {}) }))
                                         .filter(e => e.name || e.n);
 function teamPick(id) {   // "teamId/squadId" | "teamId" | "oneoff:NAME:#col"
   if (!id) return null;
@@ -43,17 +40,17 @@ function teamPick(id) {   // "teamId/squadId" | "teamId" | "oneoff:NAME:#col"
   return { name: S.name || T.name, bar: Q ? S.bar || "" : T.bar || "", col: S.col || T.col, text: S.text || T.text || "#FFFFFF",
            squad: Q ? squadCopy(Q) : null, club: T.name, team: tid };
 }
-const teamLabel = p => p ? p.name.toUpperCase() : "";
+const teamLabel = p => p ? String(p.name || "").toUpperCase() : "";
 
 export function newSummary() {
-  const n = ui.ng, T = n.t && app.presets.tournaments[n.t];
+  const n = ui.ng, T = n.t && app.presets?.tournaments?.[n.t];
   const lines = [];
   if (T) lines.push([T.name.toUpperCase(), "#3A3A3E"]);
   if (n.div) lines.push([divName(n.div).toUpperCase(), "#3A3A3E"]);
   const A = teamPick(n.a), B = teamPick(n.b);
   if (A) lines.push([teamLabel(A), A.col]);
   if (B) lines.push(["V " + teamLabel(B), B.col]);
-  if (n.step >= 5) {
+  if (n.step >= 5 && T) {
     const rs = ordered(T.ruleSets)[n.rule]?.[1]; lines.push([(rs?.name || "").toUpperCase(), "#3A3A3E"]);
     lines.push([roundText(n), "#3A3A3E"]);
     lines.push([(n.darks === 0 ? teamLabel(A) : teamLabel(B)) + " IN DARKS", "#3A3A3E"]);
@@ -64,12 +61,10 @@ export function newSummary() {
 export function newHTML() {
   const n = ui.ng, P = app.presets;
   if (!P) return `<div></div><div class="bottom">${b("ngBack", "", "BACK", { cls: "darkb sm" })}</div>`;
-  const home = P.home, H = P.teams[home] || {};
   let opts = [];
   if (n.step === 0) opts = ordered(P.tournaments).map(([id, T]) => [id, T.name, "#2A2A2E"]);
-  else if (n.step === 1) opts = (P.tournaments[n.t].divisions || []).map(d => [d, divName(d), "#2A2A2E"]);
-  else if (n.step === 2) opts = [...teamOptions(home, H, n.div), ["notus", "NOT US", "#2A2A2E"]];
-  else if (n.step === 3) {
+  else if (n.step === 1) opts = (P.tournaments?.[n.t]?.divisions || []).map(d => [d, divName(d), "#2A2A2E"]);
+  else if (n.step === 2 || n.step === 3) {
     if (n.oneOff) {
       return `<div style="display:flex;flex-direction:column;gap:calc(var(--u)*16)">
           <input class="txt" id="oneOffName" placeholder="TEAM NAME" value="${esc(n.oneOffName || "")}" maxlength="24">
@@ -77,9 +72,20 @@ export function newHTML() {
         </div>
         <div class="bottom">${b("ngBack", "", "BACK", { cls: "darkb sm" })}${b("oneOffOk", "", `${IC.check} OK`, { cls: "wide med green" })}</div>`;
     }
-    // Two squads of the same team can play each other (intra-uni); only the exact same pick is hidden.
-    for (const [tid, T] of ordered(P.teams)) opts.push(...teamOptions(tid, T, n.div).filter(([id]) => id !== n.a));
-    opts.push(["oneoff", "ONE-OFF TEAM", "#2A2A2E"]);
+    // Picking a team: one tile per team. A team with squads for this division opens a second short list —
+    // its squads plus NO SQUAD (the team itself). Two squads of one team can play each other (intra-uni);
+    // only the exact same pick is hidden.
+    if (n.team) {
+      const T = P.teams[n.team] || {};
+      opts = [...squadsOf(n.team, n.div).map(([sid, Q]) => [n.team + "/" + sid, Q.name, Q.col || T.col]), [n.team, "NO SQUAD", T.col]]
+        .filter(([id]) => id !== n.a);
+    } else {
+      for (const [tid, T] of ordered(P.teams)) {
+        const left = [...squadsOf(tid, n.div).map(([sid]) => tid + "/" + sid), tid].filter(id => id !== n.a);
+        if (left.length) opts.push([squadsOf(tid, n.div).length ? "team:" + tid : tid, T.name + (squadsOf(tid, n.div).length ? "  ›" : ""), T.col]);
+      }
+      opts.push(["oneoff", "ONE-OFF TEAM", "#2A2A2E"]);
+    }
   }
   if (n.step <= 3) {
     return `<div class="scroll"><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:calc(var(--u)*64);gap:calc(var(--u)*14) calc(var(--u)*20)">
@@ -88,7 +94,9 @@ export function newHTML() {
       <div class="bottom">${b("ngBack", "", "BACK", { cls: "darkb sm" })}</div>`;
   }
   // details
-  const T = P.tournaments[n.t], rsets = ordered(T.ruleSets).map(([, r]) => r);
+  const T = P.tournaments?.[n.t];
+  if (!T) { n.step = 0; n.t = null; return `<div></div><div class="bottom">${b("ngBack", "", "BACK", { cls: "darkb sm" })}</div>`; }   // deleted meanwhile
+  const rsets = ordered(T.ruleSets).map(([, r]) => r);
   const A = teamPick(n.a), B = teamPick(n.b);
   const r = ROUNDS[n.round];
   const subLabel = r === "POOL" ? "ABCDEFGH"[n.sub % 8] : r === "SWISS ROUND" ? String((n.sub % 8) + 1) : r === "PLACEMENT" ? PLACES[n.sub % PLACES.length] : "—";
@@ -109,19 +117,21 @@ export const newGameActions = {
   ngBack() {
     const n = ui.ng;
     if (n.oneOff) { n.oneOff = false; return; }
+    if (n.team) { n.team = null; return; }                          // squads list → back to the teams
     if (n.step === 5) { n.b = null; n.step = 3; return; }
-    if (n.step === 3) { if (n.notUs && n.a) { n.a = null; return; } n.a = null; n.notUs = false; n.step = 2; return; }
-    if (n.step === 2) { n.div = null; n.step = 1; return; }
+    if (n.step === 3) { n.a = null; n.step = 2; return; }
+    if (n.step === 2) { n.div = null; n.step = (app.presets?.tournaments?.[n.t]?.divisions || []).length ? 1 : 0; if (!n.step) n.t = null; return; }
     if (n.step === 1) { n.t = null; n.step = 0; return; }
     ui.screen = null; ui.ng = null;
   },
   ngPick(id) {
     const n = ui.ng;
-    if (n.step === 0) { n.t = id; n.step = 1; return; }
+    if (n.step === 0) { n.t = id; n.step = (app.presets?.tournaments?.[id]?.divisions || []).length ? 1 : 2; return; }   // no divisions: skip that step
     if (n.step === 1) { n.div = id; n.step = 2; return; }
-    if (n.step === 2) { n.notUs = id === "notus"; n.a = n.notUs ? null : id; n.step = 3; return; }
     if (id === "oneoff") { n.oneOff = true; n.oneOffName = ""; n.oneOffCol = SWATCH[0]; return; }
-    if (n.notUs && !n.a) { n.a = id; return; }                      // not us: first pick = one team, stay for the other
+    if (id.startsWith("team:")) { n.team = id.slice(5); return; }    // team with squads: show its squads
+    n.team = null;
+    if (n.step === 2) { n.a = id; n.step = 3; return; }
     n.b = id; n.step = 5;
   },
   swatch(c) { ui.ng.oneOffCol = c; },

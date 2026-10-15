@@ -1,7 +1,7 @@
 // Sign-in gate for the control page and the admin panel. Shows its own screen until the person is signed
 // in with Google AND their email is on the access list with a high enough role; then gets out of the way.
 // Works offline after the first sign-in: both the sign-in and the role are remembered on the device.
-import { onUser, signIn, signOut, watchRole, claimAdmin } from "./db.js";
+import { onUser, signIn, signOut, watchRole, claimAdmin, holdLock } from "./db.js";
 
 const RANK = { control: 1, admin: 2 };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -24,7 +24,27 @@ export function gate(need, title) {
   const show = html => { el.style.display = "flex"; box.innerHTML = `<h1>${esc(title)}</h1>${html}${note ? `<p style="color:#F28B82">${esc(note)}</p>` : ""}`; };
 
   return new Promise(resolve => {
-    let stopRole = null, done = false, me = null, claiming = false;
+    let stopRole = null, done = false, me = null, claiming = false, locking = false;
+    const page = need, what = need === "admin" ? "admin panel" : "control page";
+    // Allowed in: now only one device may have this page open. Offline, it opens anyway (the phone can't
+    // check) and checks once it's back online.
+    function enterWhenFree(user, role) {
+      if (locking) return; locking = true;
+      let entered = false;
+      const enter = () => { if (entered) return; entered = done = true; el.remove(); resolve({ email: user.email, role }); };
+      const offline = setTimeout(enter, 6000);
+      show(`<p>Signed in as ${esc(user.email)}</p><p>Checking nobody else has the ${what} open…</p>`);
+      holdLock(page, user.email, ({ mine, holder }) => {
+        if (mine) { clearTimeout(offline); if (!entered) enter(); else if (!el.isConnected) location.reload(); return; }
+        clearTimeout(offline);
+        if (!el.isConnected) document.body.appendChild(el);
+        show(entered
+          ? `<p>The ${what} has been opened on another device${holder ? ` (${esc(holder)})` : ""}, so it's locked here.</p>
+             <p>Only one device at a time. This one takes over again when that one closes it.</p>`
+          : `<p>The ${what} is open on another device${holder ? ` (${esc(holder)})` : ""}.</p>
+             <p>Only one device at a time. It opens here by itself as soon as that one closes it.</p><button data-g="out">SIGN OUT</button>`);
+      });
+    }
     show("<p>Checking sign-in…</p>");
     onUser(user => {
       me = user?.email || null;
@@ -38,7 +58,7 @@ export function gate(need, title) {
       stopRole = watchRole(user.email, role => {
         // While a first-time claim is waiting for the server, the page's own guess doesn't count.
         if (claiming) return;
-        if ((RANK[role] || 0) >= RANK[need]) { done = true; el.remove(); resolve({ email: user.email, role }); return; }
+        if ((RANK[role] || 0) >= RANK[need]) { enterWhenFree(user, role); return; }
         show(`<p>Signed in as ${esc(user.email)}</p>
           <p>${role ? `This page needs the ${need} role; you have ${role}.` : "This account isn't on the access list yet. Ask an admin to add it."}</p>
           ${role ? "" : `<button data-g="claim">FIRST-TIME SET-UP: MAKE ME ADMIN</button><p style="font-size:16px">Only works while nobody has access yet.</p>`}

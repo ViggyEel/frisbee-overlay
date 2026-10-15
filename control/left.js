@@ -49,7 +49,7 @@ export function leftHTML(v, scr) {
       <div class="toprow"><span class="status${gold ? " gold" : ""} fit">${esc(status)}</span>${conn}</div>
       <div class="timer${!v || !st.started || st.ended || !st.running ? " grey" : ""}" id="timer"></div>
       <div class="infoline fit">${esc(parts)}</div>
-      <div class="last fit">${esc(v ? lastLog(v) : "")}</div>
+      <div class="last"><span>${esc(v ? lastLog(v) : "")}</span></div>
     </div>
     <div class="plusrow${lockedPlus ? " locked" : ""}">${plus("a")}${plus("b")}</div>`;
 }

@@ -31,6 +31,7 @@ const CALL_PAGES = Math.ceil(CALLS.length / 5);
 // Sets the right side's row layout and background; returns the HTML.
 function R(rows, html, plain) { const r = document.getElementById("right"); r.className = plain ? "plain" : ""; r.style.gridTemplateRows = rows; return html; }
 const NOW = "calc(var(--u)*118) 1fr";
+const left = n => n === Infinity ? "∞" : n;                     // timeouts left (unlimited: ∞)
 
 export function rightHTML(v, scr) {
   const st = v?.st, s = v?.s;
@@ -40,7 +41,7 @@ export function rightHTML(v, scr) {
       return R(NOW, `
         ${b("newgame", "", "NEW GAME", { cls: "green now", confirm: true })}
         <div class="r3">
-          ${b("callOpen", "", "CALL", { cls: "big", off: !has || !st.started })}
+          ${b("callOpen", "", "CALL", { cls: "big", off: !has || !st.started || v.s.calls === false })}
           ${b("setup", "", "ADMIN", { cls: "darkb med" })}
           ${b("ov", "ov", "OVERRIDES", { cls: "darkb med", off: !has })}
         </div>`, true);
@@ -68,16 +69,17 @@ export function rightHTML(v, scr) {
       let ctx;
       if (st.pendingFinal) ctx = b("confirmFinal", "", "CONFIRM FINAL", { cls: "green now", confirm: true });
       else if (st.paused) ctx = b("resume", "", "RESUME CLOCK", { cls: "green now", confirm: true });
-      else if (v.status === "lastPossession") ctx = b("end", "", "END GAME", { cls: "now", confirm: true, danger: true });
+      // last possession after the buzzer (also when tied, which shows as universe point): it can end without a goal
+      else if (v.hardPending && s.endRule === "lastPossession") ctx = b("end", "", "END GAME", { cls: "now", confirm: true, danger: true });
       else if (v.halfButton) ctx = b("half", "", "HALFTIME", { cls: "now", confirm: true });
       else if (s.breakChance && st.pull) ctx = b("bc", "", st.breakChance ? "BREAK CHANCE · ON" : `BREAK CHANCE · ${esc(name(st.pull))}`,
         { cls: "now", confirm: true, style: st.breakChance ? "background:#5A4600" : "" });
       else ctx = `<div style="border:1px solid var(--line)"></div>`;
-      const tl = v.timeoutsLeft, toOn = s.toCount > 0;
+      const tl = v.timeoutsLeft, toOn = !!s.toCount;              // toCount < 0: unlimited
       return R(NOW, `${ctx}
         <div class="r3">
           ${b("callOpen", "", "CALL", { cls: "big", off: s.calls === false })}
-          ${b("toOpen", "", `<span>TIMEOUT</span>${toOn ? `<span class="sub">${esc(name("a"))} · ${tl.a}</span><span class="sub">${esc(name("b"))} · ${tl.b}</span>` : ""}`, { cls: "col big", off: lk || !toOn || (tl.a + tl.b === 0) })}
+          ${b("toOpen", "", `<span>TIMEOUT</span>${toOn ? `<span class="sub">${esc(name("a"))} · ${left(tl.a)}</span><span class="sub">${esc(name("b"))} · ${left(tl.b)}</span>` : ""}`, { cls: "col big", off: lk || !toOn || (tl.a + tl.b === 0) })}
           ${b("ov", "ov", "OVERRIDES", { cls: "darkb med" })}
         </div>`, true);
     }
@@ -97,7 +99,9 @@ export function rightHTML(v, scr) {
     case "call_open": {
       const c = st.call;
       const outs = ["UNCONTESTED", "CONTESTED", "RETRACTED"].map(o => b("outcome", o, o, { cls: o.length > 9 ? "sm" : "med", confirm: true }));
-      const canRemove = !!st.lastPointKey;
+      // Only if the last point was the last thing recorded before this call (same rule as the scoring).
+      const evs = app.cur.events.filter(e => !["display", "confirm_final"].includes(e.type)), ci = evs.findIndex(e => e.key === c.key);
+      const canRemove = !!st.lastPointKey && ci > 0 && evs[ci - 1].key === st.lastPointKey;
       const after = `${st.lastPointTeam === "a" ? st.a - 1 : st.a}–${st.lastPointTeam === "b" ? st.b - 1 : st.b}`;
       return R(`calc(var(--u)*44) 1fr calc(var(--u)*56) calc(var(--u)*50)`, `
         <div class="teambar fit" style="background:${col(c.team)}">${esc(name(c.team))} CALLED ${esc(c.call)}</div>
@@ -108,7 +112,7 @@ export function rightHTML(v, scr) {
     }
     case "timeout_select": {
       const tl = v.timeoutsLeft;
-      const tm = t => b("toTeam", t, `<span>${esc(name(t))}</span><span class="sub">${tl[t]} LEFT</span>`,
+      const tm = t => b("toTeam", t, `<span>${esc(name(t))}</span><span class="sub">${tl[t] === Infinity ? "UNLIMITED" : tl[t] + " LEFT"}</span>`,
         { cls: "col big" + (tl[t] ? "" : " off"), confirm: true, style: `background:${col(t)}` });
       return R(`1fr calc(var(--u)*50)`, `
         <div class="r2">${tm("a")}${tm("b")}</div>
@@ -117,7 +121,7 @@ export function rightHTML(v, scr) {
     case "timeout_run": {
       const t = st.timeout.team;
       return R(`calc(var(--u)*44) 1fr calc(var(--u)*50)`, `
-        <div class="teambar" style="background:${col(t)}"><span class="fit">${esc(name(t))} TIMEOUT</span><span style="opacity:.8">${v.timeoutsLeft[t]} LEFT</span></div>
+        <div class="teambar" style="background:${col(t)}"><span class="fit">${esc(name(t))} TIMEOUT</span><span style="opacity:.8">${v.timeoutsLeft[t] === Infinity ? "" : v.timeoutsLeft[t] + " LEFT"}</span></div>
         <div class="r2"><div id="toCount" style="display:flex;align-items:center;justify-content:center;font-size:calc(var(--u)*104);font-weight:600"></div>
           ${b("toResume", "", "RESUME", { cls: "green", confirm: true, style: "font-size:calc(var(--u)*40)" })}</div>
         <div class="bottom">${b("toCancel", "", "CANCEL", { cls: "cancel sm", confirm: true })}</div>`);
@@ -161,7 +165,7 @@ export const gameActions = {
     ui.screen = null; ui.call = null;
   },
   callCancel() { ui.screen = null; ui.call = null; },
-  callEdit() { const c = app.view.st.call; ui.screen = "call_select"; ui.call = { team: c.team, page: Math.floor(CALLS.indexOf(c.call) / 5) || 0, edit: c.key }; },
+  callEdit() { const c = app.view.st.call; ui.screen = "call_select"; ui.call = { team: c.team, page: Math.max(0, Math.floor(CALLS.indexOf(c.call) / 5)), edit: c.key }; },
   callDelete() { removeEvent(app.cur.id, app.view.st.call.key); ui.removePoint = false; },
   removeToggle() { ui.removePoint = !ui.removePoint; },
   outcome(o, t) {

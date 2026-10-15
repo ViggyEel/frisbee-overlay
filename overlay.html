@@ -3,30 +3,31 @@
 <head>
 <meta charset="utf-8">
 <title>Match Overlay</title>
-<meta name="release" content="a2bdf975">
+<meta name="release" content="870e3795">
 <script type="importmap">
 {
  "imports": {
   "./config.js": "./config.js?v=2470168a",
-  "./db.js": "./db.js?v=bf633ce3",
-  "./engine.js": "./engine.js?v=0c06bcfe",
-  "./overlay-core.js": "./overlay-core.js?v=70fdbd7d",
+  "./db.js": "./db.js?v=e7fb4d53",
+  "./engine.js": "./engine.js?v=d4bb6e71",
+  "./overlay-core.js": "./overlay-core.js?v=a14193e4",
   "./release.js": "./release.js?v=dcc06c84",
-  "./rule-fields.js": "./rule-fields.js?v=97ba831e",
-  "./sample-data.js": "./sample-data.js?v=a848a2a6",
-  "./gate.js": "./gate.js?v=3e2172f6",
-  "./control/buttons.js": "./control/buttons.js?v=35b48dd1",
+  "./rule-fields.js": "./rule-fields.js?v=ad6e1842",
+  "./sample-data.js": "./sample-data.js?v=41efac97",
+  "./gate.js": "./gate.js?v=1f356857",
+  "./control/buttons.js": "./control/buttons.js?v=b4a82ced",
   "./control/icons.js": "./control/icons.js?v=9b26e8b1",
-  "./control/left.js": "./control/left.js?v=8647e0c2",
-  "./control/main.js": "./control/main.js?v=5f6f5d52",
-  "./control/newgame.js": "./control/newgame.js?v=e24bcb8e",
-  "./control/overrides.js": "./control/overrides.js?v=7d4659b6",
-  "./control/scorer.js": "./control/scorer.js?v=4ec0c306",
-  "./control/screens.js": "./control/screens.js?v=af641c24",
-  "./control/state.js": "./control/state.js?v=c290cc04",
-  "./admin/edit.js": "./admin/edit.js?v=ed0f3224",
-  "./admin/main.js": "./admin/main.js?v=d59c897a",
-  "./admin/state.js": "./admin/state.js?v=af3f7e2a"
+  "./control/left.js": "./control/left.js?v=186ab475",
+  "./control/main.js": "./control/main.js?v=ef65fa80",
+  "./control/newgame.js": "./control/newgame.js?v=b154f228",
+  "./control/overrides.js": "./control/overrides.js?v=69c243e3",
+  "./control/scorer.js": "./control/scorer.js?v=16dde319",
+  "./control/screens.js": "./control/screens.js?v=904aa2ce",
+  "./control/state.js": "./control/state.js?v=db16e7c0",
+  "./admin/colour.js": "./admin/colour.js?v=f59efe4d",
+  "./admin/edit.js": "./admin/edit.js?v=fe17fffb",
+  "./admin/main.js": "./admin/main.js?v=5dfe8fb6",
+  "./admin/state.js": "./admin/state.js?v=b4c25f9c"
  }
 }
 </script>
@@ -48,8 +49,12 @@ import { watchRelease, reloadTo } from "./release.js";
 // ?test adds a grey background so the overlay can be checked in a normal browser.
 if (new URLSearchParams(location.search).has("test")) document.body.style.background = "#5a6b52";
 
-const svgText = await (await fetch("overlay.svg?v=" + Date.now(), { cache: "no-store" })).text();
-const ov = await mountOverlay(document.getElementById("host"), svgText);
+// If the design can't be loaded (a blip as the stream starts), try again rather than stay blank.
+let ov;
+try {
+  const svgText = await (await fetch("overlay.svg?v=" + Date.now(), { cache: "no-store" })).text();
+  ov = await mountOverlay(document.getElementById("host"), svgText);
+} catch (e) { console.error(e); setTimeout(() => location.reload(), 5000); throw e; }
 
 let cur = null;
 watchCurrent(c => { cur = c; render(); });
@@ -61,9 +66,13 @@ let updateSince = null, newRelease = null;
 watchRelease(r => { if (!updateSince) { newRelease = r; updateSince = Date.now(); } });
 const BREAKS = ["pre", "final", "half", "suspended", "paused"];
 
+let shownGame = null;
 function render() {
   const t = now();
-  const v = cur ? compute(cur.game.settings, cur.events, t) : null;
+  // a game with no settings (deleted, or not arrived yet) shows nothing rather than a blank 0–0 bar
+  const v = cur && cur.game?.settings ? compute(cur.game.settings, cur.events, t) : null;
+  // a different game: start the board afresh (it builds in) instead of animating the old game's scores away
+  if ((cur?.id || null) !== shownGame) { if (shownGame) ov.update(null, t); shownGame = cur?.id || null; }
   if (updateSince && (!v || BREAKS.includes(v.status) || v.st.timeout || v.st.hidden || Date.now() - updateSince > 15 * 60000)) {
     updateSince = null; reloadTo(newRelease); return;
   }

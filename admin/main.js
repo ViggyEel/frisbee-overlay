@@ -1,112 +1,150 @@
-// Admin panel: tournaments (divisions, rule sets), teams, players, squads, divisions, backup.
-// Portrait, phone or laptop. Lists → tap a row to edit → SAVE (double tap). Nothing is written until SAVE.
+// Admin panel. Portrait; on wide screens everything grows a little but never fills the screen.
+// Home is a column of big buttons; each opens its own screen. A fixed bar at the bottom holds BACK and
+// the screen's main action. Only SAVE (and removing things) needs a double tap.
 import { watchPresets, onConnected, onPending, readAll, removePreset, watchAccess, setAccess, keyEmail, emailKey, signOut } from "../db.js";
-import { data, ui, esc, P, ordered, b, fromMmss } from "./state.js";
-import { open, form, editActions, squadResults, readLogo } from "./edit.js";
+import { data, ui, top, go, pop, esc, P, ordered, b, listRow } from "./state.js";
+import { formScreen, formBar, ruleSetScreen, editActions, squadResults, typed, readLogo, dirty } from "./edit.js";
+import { colourScreen, mountColour } from "./colour.js";
 import { SAMPLE } from "../sample-data.js";
 
 const $ = id => document.getElementById(id);
-const SECTIONS = [["tournaments", "TOURNAMENTS"], ["teams", "TEAMS"], ["players", "PLAYERS"], ["squads", "SQUADS"], ["divisions", "DIVISIONS"], ["access", "ACCESS"], ["backup", "BACKUP"]];
 const me = window.adminUser?.email || "";
+// In order of what depends on what: tournaments use divisions; teams' squads use players and divisions.
+const SECTIONS = [["divisions", "DIVISIONS", "division"], ["tournaments", "TOURNAMENTS", "tournament"], ["players", "PLAYERS", "player"],
+                  ["teams", "TEAMS", "team"], ["access", "ACCESS"], ["backup", "BACKUP"]];
 
-watchPresets(p => { data.presets = p; if (!ui.edit) render(); });    // never redraw a form while it's being typed in
-onConnected(ok => { data.connected = ok; header(); });
-onPending(n => { data.waiting = n; header(); });
-watchAccess(a => { data.access = a; if (!ui.edit && ui.section === "access") render(); });
+// Never redraw a screen while it's being typed in — except a team's screen, so a squad just saved shows up.
+watchPresets(p => { data.presets = p; if (!busy() || (top().s === "edit" && top().kind === "team" && !document.activeElement?.matches("input"))) render(); });
+watchAccess(a => { data.access = a; if (!busy()) render(); });
+onConnected(ok => { data.connected = ok; head(); });
+onPending(n => { data.waiting = n; head(); });
+const busy = () => ["edit", "ruleset", "colour"].includes(top().s);
 
-// ---------------------------------------------------------------- header
-function header() {
-  const conn = data.connected && !data.waiting ? '<span class="conn">CONNECTED</span>'
-    : `<span class="conn off">${data.connected ? "SENDING" : "OFFLINE"}${data.waiting ? " · " + data.waiting + " WAITING" : ""}</span>`;
-  $("head").innerHTML = `<div class="top"><h1>ADMIN</h1><span>${conn} <button class="link" data-act="signout">SIGN OUT</button></span></div>
-    <nav>${SECTIONS.map(([k, l]) => `<button class="tab${ui.section === k ? " on" : ""}" data-act="section" data-arg="${k}">${l}</button>`).join("")}</nav>
-    ${ui.msg ? `<p class="msg">${esc(ui.msg)}</p>` : ""}`;
+// ---------------------------------------------------------------- top line
+function head() {
+  const conn = data.connected && !data.waiting ? '<span class="conn"><i></i>CONNECTED</span>'
+    : `<span class="conn off"><i></i>${data.connected ? "SENDING" : "OFFLINE"}${data.waiting ? " · " + data.waiting + " WAITING" : ""}</span>`;
+  $("head").innerHTML = `<div class="top"><span class="crumb">${esc(crumb())}</span>${conn}</div>${ui.msg ? `<p class="msg">${esc(ui.msg)}</p>` : ""}`;
 }
+const crumb = () => ui.stack.map(f => f.s === "home" ? "ADMIN" : f.s === "list" ? SECTIONS.find(s => s[0] === f.section)[1]
+  : f.s === "edit" ? (f.d.name || "NEW").toUpperCase() : f.s === "ruleset" ? "RULE SET" : f.s === "colour" ? "COLOUR" : "").join(" › ");
 
-// ---------------------------------------------------------------- lists
-const row = (kind, id, name, detail, colour) => `<button class="item" data-act="edit" data-arg="${kind}|${id}">
-    <i style="background:${colour || "#3A3A3E"}"></i><span>${esc(String(name || "(no name)").toUpperCase())}</span><small>${esc(detail || "")}</small></button>`;
-const newBtn = (kind, label) => b("edit", kind + "|", "+ " + label, { cls: "green wide" });
-function list() {
+// ---------------------------------------------------------------- screens
+function home() {
+  const p = P(), n = o => Object.keys(o || {}).length;
+  const counts = { tournaments: n(p.tournaments), teams: n(p.teams), players: Object.values(p.players || {}).filter(x => !x.hidden).length,
+                   divisions: n(p.divisions), access: n(data.access) };
+  return `<div class="tiles">${SECTIONS.map(([k, label]) => b("section", k, `${label}${counts[k] != null ? `<small>${counts[k]}</small>` : ""}`, { cls: "tile" })).join("")}</div>
+    <p class="note">Signed in as ${esc(me)}</p>`;
+}
+function list(section) {
   const p = P(), divName = id => p.divisions?.[id]?.name || id, teamName = id => p.teams?.[id]?.name || "?";
-  switch (ui.section) {
+  const kind = SECTIONS.find(s => s[0] === section)[2];
+  switch (section) {
     case "tournaments":
-      return newBtn("tournament", "NEW TOURNAMENT") + ordered(p.tournaments).map(([id, t]) =>
-        row("tournament", id, t.name, `${(t.divisions || []).map(divName).join(" · ")} — ${Object.keys(t.ruleSets || {}).length} rule set(s)`)).join("");
+      return ordered(p.tournaments).map(([id, t]) => listRow("openForm", `${kind}|${id}`, t.name,
+        `${(t.divisions || []).map(divName).join(" · ")} — ${Object.keys(t.ruleSets || {}).length} rule set(s)`)).join("") || empty("tournaments");
     case "teams":
-      return newBtn("team", "NEW TEAM") + ordered(p.teams).map(([id, t]) => row("team", id, t.name, (p.home === id ? "OUR TEAM · " : "") + (t.bar ? "BAR: " + t.bar : ""), t.col)).join("");
+      return ordered(p.teams).map(([id, t]) => {
+        const sq = ordered(p.squads).filter(([, q]) => q.team === id).map(([, q]) => q.name);
+        return listRow("openForm", `${kind}|${id}`, t.name, [sq.length ? `${sq.length} SQUAD${sq.length > 1 ? "S" : ""}: ${sq.join(", ")}` : ""].filter(Boolean).join(" · "), t.col);
+      }).join("") || empty("teams");
     case "players": {
-      const q = ui.q.trim().toLowerCase();
-      const all = playerList();
       const nHidden = Object.values(p.players || {}).filter(x => x.hidden).length;
-      return newBtn("player", "NEW PLAYER") + `<input class="search" data-search="players" value="${esc(ui.q)}" placeholder="search ${all.length} players" autocomplete="off">
-        ${nHidden ? b("showHidden", "", ui.showHidden ? `HIDE THE ${nHidden} HIDDEN` : `SHOW ${nHidden} HIDDEN`, { cls: "chip" + (ui.showHidden ? " on" : "") }) : ""}
-        <div id="results">${playerRows(all, q)}</div>`;
+      return `<input class="search" data-search="players" value="${esc(ui.q)}" placeholder="search players" autocomplete="off">
+        ${nHidden ? b("showHidden", "", ui.showHidden ? `HIDE THE ${nHidden} HIDDEN` : `SHOW ${nHidden} HIDDEN`, { cls: "chip" + (ui.showHidden ? " sel" : "") }) : ""}
+        <div id="results">${playerRows(ui.q)}</div>`;
     }
-    case "squads":
-      return newBtn("squad", "NEW SQUAD") + ordered(p.squads).map(([id, s]) =>
-        row("squad", id, s.name, `${teamName(s.team)} · ${(s.divisions || []).map(divName).join(" · ") || "every division"} · ${(s.players || []).length} players`, s.col || p.teams?.[s.team]?.col)).join("") +
-        '<p class="note">Squads are for one event: delete them afterwards. Past games keep their own copy.</p>';
     case "divisions":
-      return newBtn("division", "NEW DIVISION") + ordered(p.divisions).map(([id, d]) => row("division", id, d.name, "")).join("");
+      return ordered(p.divisions).map(([id, d]) => listRow("openForm", `${kind}|${id}`, d.name, "")).join("") || empty("divisions");
     case "access": {
-      // Who may sign in. Control = run games; admin = everything here too.
+      // There must always be at least one admin, so the last admin can't step down or leave.
+      const admins = Object.values(data.access || {}).filter(r => r === "admin").length;
       const rows = Object.entries(data.access || {}).sort(([x], [y]) => x.localeCompare(y)).map(([k, role]) => {
-        const email = keyEmail(k), self = emailKey(me) === k;
-        return `<div class="arow"><span>${esc(email)}${self ? " (YOU)" : ""}</span>
-          ${b("role", `${k}|control`, "CONTROL", { cls: "chip" + (role === "control" ? " on" : ""), off: self })}
-          ${b("role", `${k}|admin`, "ADMIN", { cls: "chip" + (role === "admin" ? " on" : ""), off: self })}
-          ${b("unaccess", k, "✕", { cls: "dark", confirm: true, danger: true, off: self })}</div>`;
+        const self = emailKey(me) === k, lastAdmin = role === "admin" && admins < 2;
+        return `<div class="arow"><span>${esc(keyEmail(k))}${self ? " (YOU)" : ""}</span>
+          <div class="pair">${b("role", `${k}|control`, "CONTROL", { cls: "chip" + (role === "control" ? " sel" : ""), off: lastAdmin, confirm: self && role === "admin", armedLabel: "TAP AGAIN" })}
+          ${b("role", `${k}|admin`, "ADMIN", { cls: "chip" + (role === "admin" ? " sel" : "") })}
+          ${b("unaccess", k, self ? "REMOVE ME" : "REMOVE", { cls: "red", confirm: true, danger: true, off: lastAdmin })}</div></div>`;
       }).join("");
-      return `<p class="note">People sign in with their Google account. Add their Google email here first.
-          CONTROL can run games; ADMIN can also change everything in this panel. You can't change or remove yourself.</p>
-        <div class="arow add"><input data-access="email" placeholder="name@gmail.com" type="email" autocomplete="off" value="${esc(ui.newEmail || "")}">
-          ${b("addAccess", "control", "+ CONTROL", { cls: "green" })}${b("addAccess", "admin", "+ ADMIN", { cls: "green" })}</div>
-        ${rows}`;
+      return `<label class="field"><span>ADD SOMEONE</span><input data-access="email" placeholder="their Google email" type="email" autocomplete="off" value="${esc(ui.newEmail)}"></label>
+        <div class="pair">${b("addAccess", "control", "+ CONTROL", { cls: "green" })}${b("addAccess", "admin", "+ ADMIN", { cls: "green" })}</div>
+        <small>CONTROL can run games. ADMIN can also change everything here. You can remove yourself (e.g. when you leave the team) — there must always be at least one admin.</small>
+        <h3>WHO HAS ACCESS</h3>${rows}`;
     }
     case "backup": {
       const hasSample = Object.keys(SAMPLE.tournaments).some(id => p.tournaments?.[id]) || Object.keys(SAMPLE.squads).some(id => p.squads?.[id]);
-      return `<p class="note">Downloads everything — games, events, tournaments, teams, players, squads — as one file. Keep it somewhere safe.</p>
-        ${b("backup", "", "DOWNLOAD BACKUP", { cls: "green wide", off: !data.connected })}
-        ${data.connected ? "" : '<p class="note">Needs a connection.</p>'}
-        <p class="note">The sample tournaments, teams, players and squads used for testing (divisions are kept).</p>
-        ${b("unsample", "", "REMOVE SAMPLE DATA", { cls: "red wide", confirm: true, danger: true, off: !hasSample })}`;
+      return `${b("backup", "", "DOWNLOAD BACKUP", { cls: "green wide", off: !data.connected })}
+        <small>Everything — games, events, tournaments, teams, players, squads, access — as one file. ${data.connected ? "" : "Needs a connection."}</small>
+        <h3>TEST DATA</h3>
+        ${b("unsample", "", "REMOVE SAMPLE DATA", { cls: "red wide", confirm: true, danger: true, off: !hasSample })}
+        <small>Removes the made-up test tournaments, teams, players and squads. Divisions are kept.</small>`;
     }
   }
   return "";
 }
+const empty = what => `<p class="note">No ${what} yet.</p>`;
+const listTitle = section => `<h2>${SECTIONS.find(s => s[0] === section)[1]}</h2>`;
 // Players by name; hidden ones only when asked for.
-const playerList = () => ordered(P().players).filter(([, x]) => ui.showHidden || !x.hidden).sort(([, x], [, y]) => String(x.name).localeCompare(String(y.name)));
-const squadsOf = id => ordered(P().squads).filter(([, s]) => (s.players || []).some(e => e.p === id)).map(([, s]) => s.name).join(", ");
-function playerRows(all, q) {
-  const hits = all.filter(([, pl]) => !q || String(pl.name).toLowerCase().includes(q));
-  return hits.map(([id, pl]) => row("player", id, pl.name, (pl.hidden ? "HIDDEN · " : "") + squadsOf(id), pl.hidden ? "#555" : null)).join("") || '<p class="note">No players match.</p>';
+function playerRows(q) {
+  q = q.trim().toLowerCase();
+  const squadsOf = id => ordered(P().squads).filter(([, s]) => (s.players || []).some(e => e.p === id)).map(([, s]) => s.name).join(", ");
+  const rows = ordered(P().players).filter(([, x]) => (ui.showHidden || !x.hidden) && (!q || String(x.name).toLowerCase().includes(q)))
+    .sort(([, x], [, y]) => String(x.name).localeCompare(String(y.name)))
+    .map(([id, pl]) => listRow("openForm", `player|${id}`, pl.name, (pl.hidden ? "HIDDEN · " : "") + squadsOf(id), pl.hidden ? "#555" : null));
+  return rows.join("") || '<p class="note">No players match.</p>';
 }
 
-// ---------------------------------------------------------------- render
+// Bottom bar per screen.
+function bar() {
+  const f = top();
+  if (f.s === "home") return b("signout", "", "SIGN OUT", { cls: "dark" }) + b("control", "", "CONTROL PAGE", { cls: "dark" });
+  if (f.s === "list") {
+    const kind = SECTIONS.find(s => s[0] === f.section)[2];
+    return b("back", "", "BACK", { cls: "dark" }) + (kind ? b("openForm", kind + "|", "+ NEW " + kind.toUpperCase(), { cls: "green" }) : "");
+  }
+  if (f.s === "edit") return formBar();
+  if (f.s === "ruleset") return b("back", "", "BACK TO TOURNAMENT", { cls: "dark" });
+  if (f.s === "colour") return b("back", "", "BACK", { cls: "dark" }) + b("useColour", "", "USE THIS COLOUR", { cls: "green" });
+  return "";
+}
+
 function render() {
-  header();
-  $("main").innerHTML = ui.edit ? form() : (data.presets === null && !data.connected ? '<p class="note">Loading…</p>' : list());
-  if (ui.edit?.kind === "squad") { const s = $("main").querySelector('[data-search="squad"]'); if (s && ui.edit.q) { s.value = ui.edit.q; $("results").innerHTML = squadResults(ui.edit.q); } }
+  head();
+  const f = top();
+  $("main").innerHTML = data.presets === null && !data.connected && f.s !== "home" ? '<p class="note">Loading…</p>'
+    : f.s === "home" ? home() : f.s === "list" ? listTitle(f.section) + list(f.section) : f.s === "edit" ? formScreen()
+    : f.s === "ruleset" ? ruleSetScreen() : f.s === "colour" ? colourScreen() : "";
+  $("bar").innerHTML = bar();
+  if (f.s === "colour") mountColour();
 }
 
-// ---------------------------------------------------------------- taps (double tap for anything that writes)
+// ---------------------------------------------------------------- taps
 let armTimer = null;
 const actions = {
   ...editActions,
-  section(k) { ui.section = k; ui.edit = null; ui.msg = ""; },
-  showHidden() { ui.showHidden = !ui.showHidden; },
+  section(k) { go({ s: "list", section: k }); },
+  back() { pop(); ui.msg = ""; },
+  control() { location.href = "control.html"; },
   async signout() { await signOut(); },
-  role(arg) { const [k, role] = arg.split("|"); setAccess(keyEmail(k), role); },
-  unaccess(k) { setAccess(keyEmail(k), null); ui.msg = `${keyEmail(k)} removed.`; },
+  showHidden() { ui.showHidden = !ui.showHidden; },
+  role(arg) {
+    const [k, role] = arg.split("|"); setAccess(keyEmail(k), role);
+    if (k === emailKey(me) && role !== "admin") setTimeout(() => location.reload(), 800);   // stepped down: leave the admin panel
+  },
+  unaccess(k) {
+    setAccess(keyEmail(k), null); ui.msg = `${keyEmail(k)} removed.`;
+    if (k === emailKey(me)) setTimeout(() => location.reload(), 800);                      // removed yourself: back to sign-in
+  },
   addAccess(role) {
     const email = String(ui.newEmail || "").trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { ui.msg = "That doesn't look like an email address."; return; }
+    const admins = Object.values(data.access || {}).filter(r => r === "admin").length;
+    if (role !== "admin" && data.access?.[emailKey(email)] === "admin" && admins < 2) { ui.msg = "That's the last admin. Add another admin first."; return; }
     setAccess(email, role); ui.newEmail = ""; ui.msg = `${email} added as ${role}.`;
   },
-  edit(arg) { const [kind, id] = arg.split("|"); open(kind, id || null); },
   async backup() {
-    ui.msg = "Preparing backup…"; header();
+    ui.msg = "Preparing backup…"; head();
     try {
       const all = await readAll();
       const a = document.createElement("a");
@@ -118,7 +156,8 @@ const actions = {
   },
   unsample() {
     for (const kind of ["tournaments", "teams", "players", "squads"]) for (const id of Object.keys(SAMPLE[kind] || {})) if (P()[kind]?.[id]) removePreset(`${kind}/${id}`);
-    if (P().home === SAMPLE.home) removePreset("home");
+    for (const [sid, q] of Object.entries(P().squads || {})) if (SAMPLE.teams?.[q.team] && !SAMPLE.squads?.[sid]) removePreset(`squads/${sid}`);   // squads made under sample teams
+    if (P().home) removePreset("home");                       // "our team" setting from older versions
     ui.msg = "Sample data removed.";
   }
 };
@@ -135,30 +174,28 @@ document.addEventListener("click", async e => {
     }
     ui.armed = null; clearTimeout(armTimer);
   }
-  if (ui.edit?.kind === "squad") ui.edit.q = act === "pIn" || act === "pNew" ? "" : ($("main").querySelector('[data-search="squad"]')?.value || "");
   await (actions[act] || (() => console.warn("no action", act)))(arg);
   render();
   if (act === "pIn" || act === "pNew") $("main").querySelector('[data-search="squad"]')?.focus();
 });
 
-// Typing goes straight into the draft (no redraw, so the keyboard stays up).
-function setPath(o, path, v) { const ks = path.split("."); let c = o; for (const k of ks.slice(0, -1)) c = c[k] ??= {}; c[ks.at(-1)] = v; }
+// Typing: straight into the draft, no redraw (the keyboard stays up). Only SAVE's colour updates.
 document.addEventListener("input", e => {
   const el = e.target;
   if (el.dataset.access === "email") { ui.newEmail = el.value; return; }
-  if (el.dataset.search === "players") { ui.q = el.value; $("results").innerHTML = playerRows(playerList(), el.value.trim().toLowerCase()); return; }
-  if (el.dataset.search === "squad") { ui.edit.q = el.value; $("results").innerHTML = squadResults(el.value); return; }
-  if (!ui.edit || !el.dataset.f) return;
-  const t = el.dataset.t, v = t === "num" ? (el.value === "" ? "" : Number(el.value)) : t === "mmss" ? fromMmss(el.value) : el.value;
-  setPath(ui.edit.d, el.dataset.f, v);
+  if (el.dataset.search === "players") { ui.q = el.value; $("results").innerHTML = playerRows(el.value); return; }
+  if (el.dataset.search === "squad") { const f = top(); f.q = el.value; $("results").innerHTML = squadResults(el.value); return; }
+  if (el.dataset.f) { typed(el); $("bar").innerHTML = bar(); }
 });
+// A typed −/+ value is tidied (e.g. "1:5" → "1:05") when you leave the box.
+document.addEventListener("focusout", e => { if (e.target.dataset?.t && busy()) render(); });
 document.addEventListener("change", async e => {
   const el = e.target;
-  if (el.dataset.logo && el.files?.[0] && ui.edit) {
-    try { ui.edit.d.eventLogo = await readLogo(el.files[0]); } catch { ui.msg = "That image couldn't be read."; }
-    render(); return;
+  if (el.dataset.logo && el.files?.[0]) {
+    try { (await import("./state.js")).formFrame().d.eventLogo = await readLogo(el.files[0]); } catch { ui.msg = "That image couldn't be read."; }
+    render();
   }
-  if (el.tagName === "SELECT" && el.dataset.f && ui.edit) render();     // e.g. squad team changes its default colour note
 });
+addEventListener("resize", () => { if (top().s === "colour") mountColour(); });
 
 render();

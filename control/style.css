@@ -20,11 +20,11 @@ svg{flex:0 0 auto}
 #app{position:fixed;inset:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   display:flex;align-items:center;justify-content:center}
 #frame{width:calc(var(--u)*844);height:calc(var(--u)*390);display:grid;grid-template-columns:calc(var(--u)*281) 1fr;position:relative}
-#left{display:grid;grid-template-rows:1fr 1fr;border-right:1px solid var(--line);min-height:0}
+#left{display:grid;grid-template-rows:1fr 1fr;grid-template-columns:minmax(0,1fr);border-right:1px solid var(--line);min-height:0;min-width:0}
 #right{background:var(--panel);padding:calc(var(--u)*22) calc(var(--u)*24) calc(var(--u)*22) calc(var(--u)*28);display:grid;min-height:0;row-gap:calc(var(--u)*16)}
 #right.plain{background:var(--bg)}
 
-.info{padding:calc(var(--u)*16);display:flex;flex-direction:column;gap:calc(var(--u)*6);min-height:0}
+.info{padding:calc(var(--u)*16);display:flex;flex-direction:column;gap:calc(var(--u)*6);min-height:0;min-width:0}
 .toprow{display:flex;justify-content:space-between;align-items:center;font-size:calc(var(--u)*15);letter-spacing:calc(var(--u)*1)}
 .status{color:var(--mut);white-space:nowrap;overflow:hidden;min-width:0;flex:1 1 auto} .status.gold{color:var(--gold)}
 .conn{display:flex;align-items:center;gap:calc(var(--u)*6);color:#6FCF8E;font-size:calc(var(--u)*14);flex:0 0 auto;white-space:nowrap}
@@ -33,7 +33,16 @@ svg{flex:0 0 auto}
 .timer{font-size:calc(var(--u)*76);line-height:.9;letter-spacing:calc(var(--u)*2);font-weight:600;font-variant-numeric:tabular-nums}
 .timer.grey{color:var(--mut)}
 .infoline{font-size:calc(var(--u)*16);letter-spacing:calc(var(--u)*1);color:var(--mut);white-space:nowrap;overflow:hidden}
-.last{margin-top:auto;border-top:1px solid var(--line);padding-top:calc(var(--u)*8);font-size:calc(var(--u)*20);letter-spacing:calc(var(--u)*1);white-space:nowrap;overflow:hidden}
+.last{min-width:0;max-width:100%;margin-top:auto;border-top:1px solid var(--line);padding-top:calc(var(--u)*8);font-size:calc(var(--u)*20);letter-spacing:calc(var(--u)*1);white-space:nowrap;overflow:hidden}
+.last span{display:inline-block}
+.last span b{font-weight:inherit;padding-right:calc(var(--u)*40)}
+/* any other text still too long at 70% size loops the same way */
+.loop{overflow:hidden;white-space:nowrap;justify-content:flex-start;text-align:left}
+.loop .tk{display:inline-block;animation:tick var(--t) linear infinite}
+.loop .tk b{font-weight:inherit;padding-right:calc(var(--u)*30)}
+/* too long: scroll round in a loop — pause at the start, then one full lap (the second copy takes its place) */
+.last.ticking span{animation:tick var(--t) linear infinite}
+@keyframes tick{0%,15%{transform:translateX(0)}100%{transform:translateX(var(--d))}}
 .summary{padding:calc(var(--u)*16);display:flex;flex-direction:column;gap:calc(var(--u)*8);grid-row:1 / span 2}
 .summary div{display:flex;align-items:center;gap:calc(var(--u)*10);font-size:calc(var(--u)*22);letter-spacing:calc(var(--u)*1);white-space:nowrap;overflow:hidden}
 .summary i{width:calc(var(--u)*6);height:calc(var(--u)*22);flex:0 0 auto}
@@ -54,6 +63,8 @@ svg{flex:0 0 auto}
 .r2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:calc(var(--u)*24);min-height:0}
 .big{font-size:calc(var(--u)*34)} .med{font-size:calc(var(--u)*28)} .sm{font-size:calc(var(--u)*22)}
 .col{flex-direction:column;gap:calc(var(--u)*4)}
+/* two-line buttons: each line fits on its own, so one long team name doesn't shrink the rest */
+.col > span{display:block;max-width:100%;overflow:hidden;white-space:nowrap}
 .sub{font-size:calc(var(--u)*20);opacity:.8;letter-spacing:calc(var(--u)*1)}
 .bottom{display:flex;justify-content:space-between;align-items:stretch;height:calc(var(--u)*50)}
 .bottom > *{width:calc(var(--u)*150)} .bottom > .wide{width:calc(var(--u)*240)}
@@ -80,6 +91,8 @@ input.txt{width:100%;height:calc(var(--u)*56);font-size:calc(var(--u)*30);backgr
 #rotate{display:none;position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;font-size:32px;letter-spacing:2px;text-align:center;padding:24px}
 @media (orientation:portrait){#rotate{display:flex}#app{display:none}}
 
-/* scorer picker: countdown drains along the bottom of the team bar */
+/* scorer picker: SKIP is the timer — the team colour fills it, like a "skip ad" button */
 .teambar{position:relative}
-.drain{position:absolute;left:0;bottom:0;height:calc(var(--u)*5);background:var(--gold);width:100%}
+.skip{position:relative}
+.skip .fill{position:absolute;inset:0;transform-origin:left;transform:scaleX(0);will-change:transform}
+.skip span{position:relative}

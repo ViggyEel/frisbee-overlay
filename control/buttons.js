@@ -33,17 +33,46 @@ export function installTaps(actions, render) {
     render();
   });
   document.addEventListener("dblclick", e => e.preventDefault(), { passive: false });
-  // Touching or scrolling anywhere keeps the scorer countdown alive.
+  // Touching or scrolling anywhere stops the scorer picker's timer.
   document.addEventListener("touchstart", touch, { passive: true });
   document.addEventListener("scroll", touch, { capture: true, passive: true });
 }
 
-// Shrink text that does not fit its box (same idea as the overlay's name fit).
+// The last-event line keeps its size; if it's too long it scrolls round in a loop (the text follows itself
+// with a gap), pausing briefly each time the start comes back.
+export function ticker(root) {
+  root.querySelectorAll(".last").forEach(box => {
+    const span = box.firstElementChild; if (!span) return;
+    const text = span.textContent;
+    if (span.scrollWidth - box.clientWidth <= 2) { box.classList.remove("ticking"); return; }
+    span.innerHTML = "";
+    for (let i = 0; i < 2; i++) { const part = document.createElement("b"); part.textContent = text; span.appendChild(part); }
+    const lap = span.firstElementChild.offsetWidth;             // one copy of the text plus its gap
+    box.style.setProperty("--d", -lap + "px");
+    box.style.setProperty("--t", (lap / 35) / 0.85 + "s");      // ~35 px a second while moving
+    box.classList.add("ticking");
+  });
+}
+// Text that does not fit its box shrinks, but never below 70% of its size (tiny text is useless on a phone).
+// If it still doesn't fit, it loops round like the last-event line. A two-line button (.col) is fitted line
+// by line, so only the line that's too long changes.
+const LOOP_SPEED = 35;                         // px per second
+function loop(el) {
+  const text = el.textContent;
+  el.classList.add("loop");
+  el.innerHTML = '<span class="tk"><b></b><b></b></span>';
+  el.querySelectorAll("b").forEach(b => { b.textContent = text; });
+  const lap = el.querySelector("b").offsetWidth;          // one copy of the text plus its gap
+  el.style.setProperty("--d", -lap + "px");
+  el.style.setProperty("--t", (lap / LOOP_SPEED) / 0.85 + "s");
+}
 export function fitAll(root) {
-  root.querySelectorAll(".fit, button, .infoline, .last, .status").forEach(el => {
+  root.querySelectorAll(".fit, button:not(.col), button.col > span, .infoline, .status").forEach(el => {
     el.style.fontSize = "";
-    let size = parseFloat(getComputedStyle(el).fontSize), guard = 0;
+    const full = parseFloat(getComputedStyle(el).fontSize), floor = Math.max(10, full * 0.7);
+    let size = full, guard = 0;
     const over = () => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
-    while (over() && size > 10 && guard++ < 60) { size -= 1; el.style.fontSize = size + "px"; }
+    while (over() && size > floor && guard++ < 60) { size -= 1; el.style.fontSize = size + "px"; }
+    if (over() && el.children.length === 0 && el.textContent.trim()) loop(el);   // plain text only (not icons)
   });
 }

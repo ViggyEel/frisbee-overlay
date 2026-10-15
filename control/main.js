@@ -2,7 +2,7 @@
 import { compute, fmt } from "../engine.js";
 import { watchCurrent, watchPresets, watchGoals, saveScorers, onConnected, onPending, now } from "../db.js";
 import { app, ui } from "./state.js";
-import { installTaps, fitAll } from "./buttons.js";
+import { installTaps, fitAll, ticker } from "./buttons.js";
 import { leftHTML } from "./left.js";
 import { rightHTML, screenOf, gameActions } from "./screens.js";
 import { scorerActions, scorerTick } from "./scorer.js";
@@ -42,17 +42,26 @@ function tally(v) {
   return out;
 }
 
+let lastGame = null;
 function render() {
   if (!ready) return;
+  try { draw(); } catch (err) { console.error(err); }     // a drawing error must never freeze the page
+}
+function draw() {
   const t = now(), cur = app.cur;
+  // The current game changed (on this phone or another): nothing half-done carries over into it.
+  if ((cur?.id || null) !== lastGame) {
+    if (lastGame) { ui.scorer = null; ui.call = null; ui.removePoint = false; if (ui.screen !== "new") ui.screen = null; }
+    lastGame = cur?.id || null;
+  }
   app.view = cur && cur.game && cur.game.settings ? compute(cur.game.settings, cur.events, t) : null;
   if (app.view) saveScorers(cur.id, tally(app.view));
   const scr = screenOf(app.view);
   if (app.update && (scr === "home" || scr === "pregame") && !ui.armed && !app.waiting) { const r = app.update; app.update = false; reloadTo(r); return; }
   if (scr !== lastScr) { ui.armed = null; lastScr = scr; }
   const L = leftHTML(app.view, scr), Rh = rightHTML(app.view, scr);
-  if (L !== lastL) { $("left").innerHTML = L; lastL = L; fitAll($("left")); }
-  if (Rh !== lastR) {
+  if (L !== lastL) { $("left").innerHTML = L; lastL = L; fitAll($("left")); ticker($("left")); }
+  if (Rh !== lastR && document.activeElement?.id !== "oneOffName") {
     const sc = $("right").querySelector(".scroll"), top = sc ? sc.scrollTop : 0;
     $("right").innerHTML = Rh; lastR = Rh; fitAll($("right"));
     const sc2 = $("right").querySelector(".scroll"); if (sc2) sc2.scrollTop = top;
