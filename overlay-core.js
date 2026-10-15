@@ -260,10 +260,15 @@ export async function mountOverlay(host, svgText, styleOpts = {}) {
   // Bottom strip: band in the channel colour, a dark band, or text only with a soft shadow.
   const shadowF = mk("filter", { id: "ovTextShadow", x: "-10%", y: "-60%", width: "120%", height: "220%" }, defs);
   mk("feDropShadow", { dx: 0, dy: 1.5, stdDeviation: 2.2, "flood-color": "#000", "flood-opacity": .85 }, shadowF);
+  // The dark band is almost the colour of the darks score box above it: a faint light line along its top edge
+  // keeps the box's bottom edge visible over a dark picture.
+  let stripEdge = null;
   function applyStrip() {
     const bgEl = $("block_subtitle_bg"), txt = T.text_subtitle?.el;
     if (bgEl) bgEl.style.opacity = STYLE.strip === "text" ? "0" : "";
     if (txt) txt.setAttribute("filter", STYLE.strip === "text" ? "url(#ovTextShadow)" : "");
+    if (bgEl && !stripEdge) { const bb = bgEl.getBBox(); stripEdge = mk("rect", { x: bb.x, y: bb.y, width: bb.width, height: 1.5, fill: "#fff", "fill-opacity": .16, "pointer-events": "none" }); bgEl.after(stripEdge); }
+    if (stripEdge) stripEdge.style.display = STYLE.strip === "dark" ? "" : "none";
   }
 
   // ---- words: a brushed-metal finish. Every text colour goes through textFill, so the gradient is made in
