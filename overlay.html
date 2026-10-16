@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Match Overlay</title>
-<meta name="release" content="92a643c8">
+<meta name="release" content="e0ea2e14">
 <script type="importmap">
 {
  "imports": {
@@ -72,7 +72,9 @@ const BREAKS = ["pre", "final", "half", "suspended", "paused"];
 let shownGame = null;
 function render() {
   const t = now() - delayMs;
-  const events = delayMs && cur ? cur.events.filter(e => e.t == null || e.t <= t) : cur?.events;   // only what had happened by then
+  // Each event shows once the delayed clock reaches the moment it happened (the +1 tap for a point), so
+  // anything saved after that moment has passed (e.g. a point saved once its scorer is picked) shows at once.
+  const events = delayMs && cur ? cur.events.filter(e => e.t == null || e.t <= t) : cur?.events;
   // a game with no settings (deleted, or not arrived yet) shows nothing rather than a blank 0–0 bar
   const v = cur && cur.game?.settings ? compute(cur.game.settings, events, t) : null;
   // a different game: start the board afresh (it builds in) instead of animating the old game's scores away
