@@ -43,7 +43,7 @@ function list(section) {
   switch (section) {
     case "tournaments":
       return ordered(p.tournaments).map(([id, t]) => listRow("openForm", `${kind}|${id}`, t.name,
-        `${(t.divisions || []).map(divName).join(" · ")} — ${Object.keys(t.ruleSets || {}).length} rule set(s)`)).join("") || empty("tournaments");
+        `${(t.divisions || []).map(divName).join(" · ")} · ${Object.keys(t.ruleSets || {}).length} rule set(s)`)).join("") || empty("tournaments");
     case "teams":
       return ordered(p.teams).map(([id, t]) => {
         const sq = ordered(p.squads).filter(([, q]) => q.team === id).map(([, q]) => q.name);
@@ -69,14 +69,14 @@ function list(section) {
       }).join("");
       return `<label class="field"><span>ADD SOMEONE</span><input data-access="email" placeholder="their Google email" type="email" autocomplete="off" value="${esc(ui.newEmail)}"></label>
         <div class="pair">${b("addAccess", "control", "+ CONTROL", { cls: "green" })}${b("addAccess", "admin", "+ ADMIN", { cls: "green" })}</div>
-        <small>CONTROL can run games. ADMIN can also change everything here. You can remove yourself (e.g. when you leave the team) — there must always be at least one admin.</small>
+        <small>CONTROL can run games. ADMIN can also change everything here. You can remove yourself (e.g. when you leave the team). There must always be at least one admin.</small>
         <h3>WHO HAS ACCESS</h3>${rows}`;
     }
     case "backup": {
       const hasSample = Object.keys(SAMPLE.tournaments).some(id => p.tournaments?.[id]) || Object.keys(SAMPLE.squads).some(id => p.squads?.[id]);
       return `${b("backup", "", "DOWNLOAD BACKUP", { cls: "green wide", off: !data.connected })}
-        <small>Everything — games, events, tournaments, teams, players, squads, access — as one file. ${data.connected ? "" : "Needs a connection."}</small>
-        <h3>TEST DATA</h3>
+        <small>Everything as one file: games, events, tournaments, teams, players, squads and access. ${data.connected ? "" : "Needs a connection."}</small>
+        <h3>SAMPLE DATA</h3>
         ${b("unsample", "", "REMOVE SAMPLE DATA", { cls: "red wide", confirm: true, danger: true, off: !hasSample })}
         <small>Removes the made-up test tournaments, teams, players and squads. Divisions are kept.</small>`;
     }

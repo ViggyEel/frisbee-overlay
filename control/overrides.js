@@ -78,11 +78,11 @@ export function rulesHTML(v) {
     <div class="bottom">${b("back", "", "BACK", { cls: "darkb sm" })}${b("rulesSave", "", `${IC.check} SAVE`, { cls: "wide med " + (changed ? "green" : "darkb off"), confirm: true })}</div>`;
 }
 
-// GAME: CALL HALFTIME · SUSPEND GAME (NEW GAME while suspended) · END GAME. After the final: RESUME PLAY.
+// GAME: HALFTIME · SUSPEND GAME (NEW GAME while suspended) · END GAME. After the final: RESUME PLAY.
 export function gameHTML(v) {
   const st = v.st, s = v.s, ended = st.ended, lk = locked();
   const first = ended ? b("resumePlay", "", "<span>RESUME</span><span>PLAY</span>", { cls: "col big green", confirm: true })
-    : b("half", "", "<span>CALL</span><span>HALFTIME</span>", { cls: "col big" + (st.halfDone || s.halfEnabled === false || !st.started || st.suspended || lk ? " off" : ""), confirm: true });
+    : b("half", "", "HALFTIME", { cls: "col big" + (st.halfDone || s.halfEnabled === false || !st.started || st.suspended || lk ? " off" : ""), confirm: true });
   const second = st.suspended ? b("newgame", "", "<span>NEW</span><span>GAME</span>", { cls: "col big green", confirm: true })
     : b("suspend", "", "<span>SUSPEND</span><span>GAME</span>", { cls: "col big" + (!st.started || ended || lk ? " off" : ""), confirm: true });
   return `<div class="r3">${first}${second}

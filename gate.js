@@ -77,7 +77,7 @@ export function gate(need, title) {
           finally { claiming = false; }
         }
       } catch (err) {
-        note = g === "claim" ? "Someone already has access — ask them to add you." : err.message;
+        note = g === "claim" ? "Someone already has access. Ask them to add you." : err.message;
         box.insertAdjacentHTML("beforeend", `<p style="color:#F28B82">${esc(note)}</p>`);
       }
     });

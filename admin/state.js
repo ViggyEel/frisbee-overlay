@@ -46,7 +46,7 @@ export const stepRow = (label, path, value, o = {}) => {
 // − choice + : steps through a list of options (not typed).
 export const optRow = (label, path, value, opts, o = {}) => {
   // a saved value that isn't one of the options (e.g. 7 timeouts) shows as itself, never as the first option
-  const cur = opts.find(([v]) => String(v) === String(value)) || (value != null && value !== "" ? [value, String(value)] : opts[0] || ["", "—"]);
+  const cur = opts.find(([v]) => String(v) === String(value)) || (value != null && value !== "" ? [value, String(value)] : opts[0] || ["", "NONE"]);
   return `<div class="rrow${o.off ? " off" : ""}"><span class="l">${label}</span>
     ${b("cycle", `${path}|-1`, MINUS)}<span class="v${o.changed ? " gold" : ""}">${esc(cur[1])}</span>${b("cycle", `${path}|1`, PLUS)}</div>`;
 };

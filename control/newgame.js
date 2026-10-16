@@ -99,13 +99,13 @@ export function newHTML() {
   const rsets = ordered(T.ruleSets).map(([, r]) => r);
   const A = teamPick(n.a), B = teamPick(n.b);
   const r = ROUNDS[n.round];
-  const subLabel = r === "POOL" ? "ABCDEFGH"[n.sub % 8] : r === "SWISS ROUND" ? String((n.sub % 8) + 1) : r === "PLACEMENT" ? PLACES[n.sub % PLACES.length] : "—";
+  const subLabel = r === "POOL" ? "ABCDEFGH"[n.sub % 8] : r === "SWISS ROUND" ? String((n.sub % 8) + 1) : r === "PLACEMENT" ? PLACES[n.sub % PLACES.length] : "NONE";
   const row = (k, label, value, off) => `<div class="rrow${off ? " off" : ""}"><span class="l">${label}</span>${b("ngCyc", k + ":-1", IC.minus, { style: "font-size:calc(var(--u)*22)" })}
       <span class="v fit">${esc(value)}</span>${b("ngCyc", k + ":1", IC.plus, { style: "font-size:calc(var(--u)*22)" })}</div>`;
   return `<div class="rows" style="grid-auto-rows:calc(var(--u)*50)">
       ${row("rule", "RULE SET", (rsets[n.rule]?.name || "").toUpperCase(), rsets.length < 2)}
       ${row("round", "ROUND", r)}
-      ${row("sub", "POOL / NO.", subLabel, subLabel === "—")}
+      ${row("sub", "POOL / NO.", subLabel, subLabel === "NONE")}
       ${row("darks", "DARKS", n.darks === 0 ? teamLabel(A) : teamLabel(B))}
       ${row("left", "LEFT", n.left === 0 ? teamLabel(A) : teamLabel(B))}
     </div>

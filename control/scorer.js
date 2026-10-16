@@ -65,7 +65,7 @@ export function scorerHTML() {
     rows.push(b("pickTyped", sc.typed, rowLabel("#" + esc(sc.typed), ""), { cls: "med", confirm: true, armedLabel: rowLabel("#" + esc(sc.typed), "", false, true), style: rowStyle }));
   }
   for (const p of [...noNum, ...top]) {
-    const num = p.n ? "#" + esc(p.n) : "—";
+    const num = p.n ? "#" + esc(p.n) : "";
     rows.push(b("pickPlayer", squad.indexOf(p), rowLabel(num, p.name, p.cap), { cls: "med", confirm: true, armedLabel: rowLabel(num, p.name, p.cap, true), style: rowStyle }));
   }
   // SKIP fills with the team colour while the timer runs; once anything is touched it's fully that colour.

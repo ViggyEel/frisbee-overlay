@@ -254,7 +254,7 @@ export function describe(e, s, brk) {
     case "point": return `POINT ${who(e.team)}${scorer}${brk ? " · BREAK" : ""}`;
     case "start": return e.pull ? `START · ${who(e.pull)} PULL` : "START";
     case "pull_set": return `PULL · ${who(e.team)}`;
-    case "half": return "HALFTIME CALLED";
+    case "half": return "HALFTIME";
     case "suspend": return "SUSPENDED";
     case "confirm_final": return "FINAL CONFIRMED";
     case "timeout": return `TIMEOUT ${who(e.team)}`;

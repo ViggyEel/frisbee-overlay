@@ -2,6 +2,7 @@
 // halftime / suspended, calls, timeouts). Overrides, new game and the scorer picker live in their own files.
 import { app, ui, esc, name, col, ev, locked, scorerOn } from "./state.js";
 import { b } from "./buttons.js";
+import { IC } from "./icons.js";
 import { scorerHTML, openScorer } from "./scorer.js";
 import { newHTML } from "./newgame.js";
 import { ovMenu, undoHTML, pullHTML, clockHTML, rulesHTML, gameHTML, displayHTML } from "./overrides.js";
@@ -31,7 +32,7 @@ const CALL_PAGES = Math.ceil(CALLS.length / 5);
 // Sets the right side's row layout and background; returns the HTML.
 function R(rows, html, plain) { const r = document.getElementById("right"); r.className = plain ? "plain" : ""; r.style.gridTemplateRows = rows; return html; }
 const NOW = "calc(var(--u)*118) 1fr";
-const left = n => n === Infinity ? "∞" : n;                     // timeouts left (unlimited: ∞)
+const left = n => n === Infinity ? IC.inf : n;                  // timeouts left (unlimited: an infinity sign)
 
 export function rightHTML(v, scr) {
   const st = v?.st, s = v?.s;

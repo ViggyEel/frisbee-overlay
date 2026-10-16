@@ -47,7 +47,7 @@ export function formBar() {
 function tournament(d) {
   const sets = ordered(d.ruleSets).map(([rid, r]) => listRow("ruleset", rid, r.name, ruleSummary(r))).join("");
   return `${textRow("NAME", "name", d.name, { ph: "e.g. SICKO Beginners", max: 60 })}
-    <div class="field"><span>DIVISIONS IT RUNS</span>${chips("div", divItems(), d.divisions || []) || "<small>No divisions yet — add them under DIVISIONS.</small>"}</div>
+    <div class="field"><span>DIVISIONS IT RUNS</span>${chips("div", divItems(), d.divisions || []) || "<small>No divisions yet. Add them under DIVISIONS.</small>"}</div>
     <div class="field"><span>EVENT LOGO</span>
       <label class="logo">${d.eventLogo ? `<img src="${esc(d.eventLogo)}" alt="">` : "<em>TAP TO ADD A LOGO</em>"}<input type="file" accept="image/*" data-logo="1" hidden></label>
       ${d.eventLogo ? b("logoOff", "", "REMOVE LOGO", { cls: "dark" }) : ""}<small>Transparent background works best. With no logo, the wordmark is shown.</small></div>
@@ -96,7 +96,7 @@ function player(d, f) {
   return `${textRow("NAME", "name", d.name, { ph: "e.g. Alex", note: "Renaming changes it from now on; past games keep the name they had." })}
     ${f.isNew ? "" : `<p class="note">${inSquads.length ? "In squads: " + esc(inSquads.join(", ")) : "Not in any squad."}</p>
       ${b("hide", "", d.hidden ? "UNHIDE" : "HIDE FROM LISTS", { cls: "dark wide", confirm: true })}
-      <small>HIDE: off the lists (e.g. left the club), everything recorded stays. DELETE EVERYWHERE: removes the player and their name from every squad, past game and point — numbers stay. Can't be undone.</small>`}`;
+      <small>HIDE: off the lists (e.g. left the club), everything recorded stays. DELETE EVERYWHERE: removes the player and their name from every squad, past game and point. Shirt numbers stay. Can't be undone.</small>`}`;
 }
 
 function squad(d, f) {
@@ -110,9 +110,9 @@ function squad(d, f) {
   return `<p class="note">${esc(String(P().teams?.[d.team]?.name || "").toUpperCase())}</p>
     ${textRow("NAME", "name", d.name, { ph: "e.g. Skunks 1", note: "Shown on the scoreboard and in NEW GAME." })}
     ${textRow("SCOREBAR NAME", "bar", d.bar, { ph: "only if the name is too long", max: 14 })}
-    ${boolRow("OWN COLOUR", "@owncol", !!d.col, { on: "YES", offLabel: "NO — TEAM COLOUR" })}
+    ${boolRow("OWN COLOUR", "@owncol", !!d.col, { on: "YES", offLabel: "NO, TEAM COLOUR" })}
     ${d.col ? colourRow("COLOUR", "col", d.col) : ""}
-    <div class="field"><span>DIVISIONS IT PLAYS</span>${chips("div", divItems(), d.divisions || [])}<small>None selected = every division.</small></div>
+    <div class="field"><span>DIVISIONS IT PLAYS</span>${chips("div", divItems(), d.divisions || [])}<small>${(d.divisions || []).length ? "" : "All divisions."}</small></div>
     ${stepRow("ORDER IN LISTS", "order", d.order)}
     <h3>PLAYERS · ${(d.players || []).length}</h3>
     <div class="players">${rows}</div>
@@ -216,7 +216,7 @@ export const editActions = {
   ruleset(rid) { go({ s: "ruleset", rid }); },
   rsAdd() { const d = formFrame().d, rid = newId(); d.ruleSets[rid] = { name: "New rule set", order: nextOrder(d.ruleSets), ...ruleDefaults() }; go({ s: "ruleset", rid }); },
   rsCopy(rid) { const d = formFrame().d, n = newId(); d.ruleSets[n] = { ...clone(d.ruleSets[rid]), name: d.ruleSets[rid].name + " (copy)", order: nextOrder(d.ruleSets) }; pop(); ui.msg = "Rule set duplicated."; },
-  rsDel(rid) { delete formFrame().d.ruleSets[rid]; pop(); ui.msg = "Rule set deleted (press SAVE to keep that)."; },
+  rsDel(rid) { delete formFrame().d.ruleSets[rid]; pop(); ui.msg = "Rule set deleted. Press SAVE to keep the change."; },
   cap(i) { const e = formFrame().d.players[+i]; e.cap = !e.cap; },
   pOut(i) { formFrame().d.players.splice(+i, 1); },
   pIn(id) { const f = formFrame(); f.d.players.push({ p: id, n: "" }); f.q = ""; },
