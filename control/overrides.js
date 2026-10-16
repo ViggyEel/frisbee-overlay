@@ -4,7 +4,7 @@ import { b } from "./buttons.js";
 import { IC } from "./icons.js";
 import { correctScorer } from "./scorer.js";
 import { fmtUp, describe } from "../engine.js";
-import { removeEvent, saveSettings, deleteGame } from "../db.js";
+import { removeEvent, saveSettings, deleteGame, setDisplay } from "../db.js";
 import { newGameActions } from "./newgame.js";
 import { RULES } from "../rule-fields.js";
 
@@ -95,10 +95,16 @@ export function displayHTML(v) {
   return `<div class="r2">
       ${b("display", "", `<span>${st.hidden ? "SHOW" : "HIDE"}</span><span>SCOREBOARD</span>`, { cls: "col big" + (st.hidden ? " green" : ""), confirm: true })}
       ${b("none", "", "<span>FINAL</span><span>RESULT BOARD</span>", { cls: "col big off" })}
-    </div>${back()}`;
+    </div>
+    <div class="rrow"><span class="l">STREAM DELAY</span>${b("delay", "-1", IC.minus, { style: "font-size:calc(var(--u)*22)" })}
+      <span class="v" style="color:${delaySec() ? "var(--gold)" : "#fff"}">${delaySec() ? delaySec().toFixed(1) + " S" : "OFF"}</span>${b("delay", "1", IC.plus, { style: "font-size:calc(var(--u)*22)" })}</div>${back()}`;
 }
 
+// Stream delay: the scoreboard runs this many seconds behind, to line up with a delayed video feed. 0–5 s.
+const delaySec = () => Number(app.display?.delay) || 0;
+
 export const overrideActions = {
+  delay(dir) { setDisplay("delay", Math.max(0, Math.min(5, Math.round((delaySec() + Number(dir) * 0.5) * 2) / 2))); },
   ov(k) { ui.screen = k; ui.pullFix = null; ui.clockVal = null; ui.rules = null; },
   back() { ui.screen = ui.screen?.startsWith("ov_") ? "ov" : null; ui.rules = null; ui.clockVal = null; ui.pullFix = null; },
   del(key) {

@@ -1,6 +1,6 @@
 // Control page: wiring and the render loop.
 import { compute, fmt } from "../engine.js";
-import { watchCurrent, watchPresets, watchGoals, saveScorers, onConnected, onPending, now } from "../db.js";
+import { watchCurrent, watchPresets, watchGoals, saveScorers, onConnected, onPending, now, watchDisplay } from "../db.js";
 import { app, ui } from "./state.js";
 import { installTaps, fitAll, ticker } from "./buttons.js";
 import { leftHTML } from "./left.js";
@@ -15,6 +15,7 @@ let lastL = "", lastR = "", lastScr = "", ready = false;
 
 watchPresets(p => { app.presets = p; render(); });
 watchCurrent(c => { app.cur = c; render(); });
+watchDisplay(d => { app.display = d; render(); });
 watchGoals(c => { app.counts = c; render(); });
 onConnected(ok => { app.connected = ok; render(); });
 onPending(n => { app.waiting = n; render(); });

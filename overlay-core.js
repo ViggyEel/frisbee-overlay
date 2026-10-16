@@ -200,6 +200,27 @@ export async function mountOverlay(host, svgText, styleOpts = {}) {
       if (a[0] !== b[0] && a[1] !== b[1]) slants.push(a[1] < b[1] ? [a, b] : [b, a]);    // [top, bottom]
     }
   });
+  // A block drawn as a plain rectangle that runs on under a slanted score box: give it the same slanted end,
+  // so nothing hides underneath. (When the board is shown at a size where an edge falls between pixels, a
+  // colour hidden underneath leaks through along that edge: a maroon sliver at the darks box's foot.)
+  svg.querySelectorAll('[id$="_bg"] rect').forEach(el => {
+    if (el.closest("#block_scoreA_bg, #block_scoreB_bg") || isShadow(el)) return;
+    const bb = el.getBBox(), x1 = bb.x + bb.width, yA = bb.y, yB = bb.y + bb.height;
+    for (const [top, bot] of slants) {
+      if (Math.abs(top[1] - yA) > 1 || Math.abs(bot[1] - yB) > 1) continue;
+      let pts = null;
+      if (Math.abs(x1 - Math.max(top[0], bot[0])) < 1 && Math.min(top[0], bot[0]) > bb.x)          // its right end meets the slant
+        pts = `${bb.x},${yA} ${top[0]},${yA} ${bot[0]},${yB} ${bb.x},${yB}`;
+      else if (Math.abs(bb.x - Math.min(top[0], bot[0])) < 1 && Math.max(top[0], bot[0]) < x1)    // its left end meets the slant
+        pts = `${top[0]},${yA} ${x1},${yA} ${x1},${yB} ${bot[0]},${yB}`;
+      if (!pts) continue;
+      const poly = document.createElementNS(SVGNS, "polygon");
+      for (const at of el.attributes) if (!["x", "y", "width", "height", "rx", "ry"].includes(at.name)) poly.setAttribute(at.name, at.value);
+      poly.setAttribute("points", pts); el.replaceWith(poly);
+      for (const e of painted) if (e.el === el) e.el = poly;                // team colours now paint the new shape
+      break;
+    }
+  });
   svg.querySelectorAll('[id$="_bg"] rect, [id$="_bg"] polygon').forEach(el => {
     if (el.closest("#block_scoreA_bg, #block_scoreB_bg") || !isShadow(el)) return;
     const bb = el.getBBox();

@@ -38,6 +38,11 @@ let offset = store.get("offset", 0);
 onValue(ref(db, ".info/serverTimeOffset"), s => { offset = s.val() || 0; store.set("offset", offset); });
 export const now = () => clock() + offset;
 
+// ---- stream display settings (public: the overlay reads them) --------------------------------------
+// delay: seconds the scoreboard runs behind real time, to line up with a delayed video feed (e.g. OBS).
+export const watchDisplay = cb => watch("display", v => cb(v || {}));
+export const setDisplay = (key, value) => write("set", `display/${key}`, value);
+
 export const onConnected = cb => onValue(ref(db, ".info/connected"), s => cb(!!s.val()));
 
 // ---- sign-in (Google) -------------------------------------------------------------------------

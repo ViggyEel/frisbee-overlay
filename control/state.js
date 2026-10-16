@@ -3,7 +3,7 @@
 import { DEFAULTS } from "../engine.js";
 import { addEvent, now } from "../db.js";
 
-export const app = { cur: null, presets: null, counts: {}, connected: false, waiting: 0, view: null, update: false };
+export const app = { cur: null, presets: null, counts: {}, connected: false, waiting: 0, view: null, update: false, display: {} };
 export const ui = {
   screen: null,        // what the person opened: "new", "call_select", "timeout_select", "ov", "ov_…"
   armed: null,         // "act|arg" of the button waiting for its second tap

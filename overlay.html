@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <title>Match Overlay</title>
-<meta name="release" content="0d31137a">
+<meta name="release" content="92a643c8">
 <script type="importmap">
 {
  "imports": {
   "./config.js": "./config.js?v=2470168a",
-  "./db.js": "./db.js?v=e7fb4d53",
+  "./db.js": "./db.js?v=598e5428",
   "./engine.js": "./engine.js?v=d4bb6e71",
-  "./overlay-core.js": "./overlay-core.js?v=60bcdd1c",
+  "./overlay-core.js": "./overlay-core.js?v=46bc643d",
   "./release.js": "./release.js?v=dcc06c84",
   "./rule-fields.js": "./rule-fields.js?v=ad6e1842",
   "./sample-data.js": "./sample-data.js?v=41efac97",
@@ -18,12 +18,12 @@
   "./control/buttons.js": "./control/buttons.js?v=b4a82ced",
   "./control/icons.js": "./control/icons.js?v=9b26e8b1",
   "./control/left.js": "./control/left.js?v=186ab475",
-  "./control/main.js": "./control/main.js?v=ef65fa80",
+  "./control/main.js": "./control/main.js?v=58b474a0",
   "./control/newgame.js": "./control/newgame.js?v=b154f228",
-  "./control/overrides.js": "./control/overrides.js?v=69c243e3",
+  "./control/overrides.js": "./control/overrides.js?v=00f37678",
   "./control/scorer.js": "./control/scorer.js?v=16dde319",
-  "./control/screens.js": "./control/screens.js?v=904aa2ce",
-  "./control/state.js": "./control/state.js?v=db16e7c0",
+  "./control/screens.js": "./control/screens.js?v=659e7d5c",
+  "./control/state.js": "./control/state.js?v=11732314",
   "./admin/colour.js": "./admin/colour.js?v=f59efe4d",
   "./admin/edit.js": "./admin/edit.js?v=fe17fffb",
   "./admin/main.js": "./admin/main.js?v=5dfe8fb6",
@@ -42,7 +42,7 @@
 <div id="host"></div>
 <script type="module">
 import { compute } from "./engine.js";
-import { watchCurrent, now } from "./db.js";
+import { watchCurrent, watchDisplay, now } from "./db.js";
 import { mountOverlay } from "./overlay-core.js";
 import { watchRelease, reloadTo } from "./release.js";
 
@@ -56,8 +56,11 @@ try {
   ov = await mountOverlay(document.getElementById("host"), svgText);
 } catch (e) { console.error(e); setTimeout(() => location.reload(), 5000); throw e; }
 
-let cur = null;
+let cur = null, delayMs = 0;
 watchCurrent(c => { cur = c; render(); });
+// Stream delay (set on the control page, OVERRIDES → DISPLAY): the scoreboard shows the game as it was this
+// long ago, so it lines up with a delayed video feed.
+watchDisplay(d => { delayMs = Math.max(0, Math.min(5, Number(d.delay) || 0)) * 1000; render(); });
 // No connection indicator here: viewers see this layer. The control page shows the connection.
 
 // A newer release was published: reload at the next break in play (or after 15 min at the latest),
@@ -68,9 +71,10 @@ const BREAKS = ["pre", "final", "half", "suspended", "paused"];
 
 let shownGame = null;
 function render() {
-  const t = now();
+  const t = now() - delayMs;
+  const events = delayMs && cur ? cur.events.filter(e => e.t == null || e.t <= t) : cur?.events;   // only what had happened by then
   // a game with no settings (deleted, or not arrived yet) shows nothing rather than a blank 0–0 bar
-  const v = cur && cur.game?.settings ? compute(cur.game.settings, cur.events, t) : null;
+  const v = cur && cur.game?.settings ? compute(cur.game.settings, events, t) : null;
   // a different game: start the board afresh (it builds in) instead of animating the old game's scores away
   if ((cur?.id || null) !== shownGame) { if (shownGame) ov.update(null, t); shownGame = cur?.id || null; }
   if (updateSince && (!v || BREAKS.includes(v.status) || v.st.timeout || v.st.hidden || Date.now() - updateSince > 15 * 60000)) {

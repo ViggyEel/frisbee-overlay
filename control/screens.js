@@ -134,7 +134,7 @@ export function rightHTML(v, scr) {
     case "ov_clock": return R(`calc(var(--u)*60) 1fr calc(var(--u)*52)`, clockHTML(v));
     case "ov_rules": return R(`1fr calc(var(--u)*52)`, rulesHTML(v));
     case "ov_game": return R(`1fr calc(var(--u)*50)`, gameHTML(v));
-    case "ov_display": return R(`1fr calc(var(--u)*50)`, displayHTML(v));
+    case "ov_display": return R(`1fr calc(var(--u)*56) calc(var(--u)*50)`, displayHTML(v));
   }
   return "";
 }

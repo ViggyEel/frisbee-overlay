@@ -27,6 +27,12 @@
       ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).val() == 'admin'"
     },
 
+    "display": {
+      // Stream display settings, e.g. how far the scoreboard runs behind real time. The overlay reads them.
+      ".read": true,
+      ".write": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()"
+    },
+
     "locks": {
       // Which device has the control page / the admin panel open (one at a time).
       ".read": "auth != null && auth.token.email_verified == true && root.child('access').child(auth.token.email.toLowerCase().replace('.', ',')).exists()",
