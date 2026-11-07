@@ -145,7 +145,7 @@ export function compute(settings, events, now) {
         st.breakChance = false;
         break;
       case "confirm_final":
-        if (st.pendingFinal) { st.ended = true; st.winner = st.pendingWinner; st.pendingFinal = false; }
+        if (st.pendingFinal) { st.ended = true; st.winner = st.pendingWinner; st.pendingFinal = false; st.breakChance = false; }
         break;
       case "suspend":
         st.suspended = true; st.paused = false; break;
@@ -174,7 +174,7 @@ export function compute(settings, events, now) {
       case "clock_set":
         st.base = Number(e.elapsed); if (st.running) st.since = t; break;
       case "end":
-        st.ended = true; st.pendingFinal = false;
+        st.ended = true; st.pendingFinal = false; st.breakChance = false;
         st.winner = st.a === st.b ? null : (st.a > st.b ? "a" : "b");
         break;
       case "point":

@@ -50,7 +50,8 @@ export function scorerHTML() {
   const g = p => goals[dbKey(p.p || p.n || p.name)] || 0;
   const noNum = squad.filter(p => !p.n);
   const exact = sc.typed ? squad.filter(p => p.n === sc.typed) : [];
-  const top = [...exact, ...squad.filter(p => p.n && p.n !== sc.typed && (!sc.typed || p.n.startsWith(sc.typed))).sort((x, y) => g(y) - g(x))].slice(0, Math.max(5, exact.length));
+  // The whole squad is listed (it scrolls), most goals first; a typed number narrows it.
+  const top = [...exact, ...squad.filter(p => p.n && p.n !== sc.typed && (!sc.typed || p.n.startsWith(sc.typed))).sort((x, y) => g(y) - g(x))];
   const armedP = ui.armed?.startsWith("pickPlayer|") ? squad[+ui.armed.split("|")[1]] : null;     // (index into the listed squad)
   const shown = armedP ? (armedP.n ? "#" + armedP.n + " " : "") + armedP.name : sc.typed ? "#" + sc.typed : "";
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "back"].map(k =>
